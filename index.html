@@ -115,6 +115,7 @@ header{border-bottom:3px solid var(--brand,var(--line))}
 .dots{display:none}.dt{width:9px;height:9px;border-radius:50%}.dt-Pending{background:#e8780f}.dt-Approved{background:#177a4e}.dt-Changes{background:#d32f2f}.cgrid .day.sel{box-shadow:inset 0 0 0 2px var(--acc)}#dayl{display:none}
 body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}body.client .sb{font-size:12px;padding:1px 9px}body.client button,body.client select{min-height:44px}body.client .chip,body.client .lg,body.client .more{min-height:0}
 @media(max-width:640px){.pc{max-width:none;margin:10px 0;border-radius:10px}.pimg{max-height:70vh}.card{padding:14px}.cgrid .cc{display:none}.cgrid .dots{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin-top:4px}.cgrid .day{cursor:pointer}#dayl{display:block}}
+.vbox{width:100%;max-height:75vh;margin-bottom:8px;background:#000}.vbox iframe{width:100%;height:100%;border:0}.pvid{display:block;width:100%;max-height:75vh;background:#000;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -244,11 +245,20 @@ let selDay=null;
 document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('img.pimg');if(!im||$('#dlg').open)return;const o=document.createElement('div');o.id='lbx';o.innerHTML='<img alt="Post visual enlarged">';o.firstChild.src=im.src.replace('sz=w1000','sz=w2000');const x=()=>{o.remove();document.removeEventListener('keydown',k);};const k=ev=>{if(ev.key==='Escape')x();};o.onclick=x;document.addEventListener('keydown',k);document.body.appendChild(o);});
 const chipHtml=p=>{const pc=safeCol(PILLARS[p.pillar]),th=thumbUrl(p.visual,'w120');
   return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
+function videoEmbed(p){const v=String(p.visual||'').trim();if(!/^https?:\/\//i.test(v))return '';
+  const fmt=p.format||'',asp=/^(Reel|Story)$/i.test(fmt)?'9/16':'16/9',box=i=>`<div class="vbox" style="aspect-ratio:${asp}">${i}</div>`;
+  const open=`<div class="pb"><a class="lnk" href="${esc(v)}" target="_blank" rel="noopener noreferrer">Open the video ↗</a></div>`;let m;
+  if(/^(Reel|Video|Story|Live)$/i.test(fmt)&&/drive\.google\.com/i.test(v)&&(m=v.match(/\/d\/([\w-]{10,})/)||v.match(/[?&]id=([\w-]{10,})/)))return box(`<iframe src="https://drive.google.com/file/d/${m[1]}/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy" title="Video preview"></iframe>`)+open;
+  if(m=v.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/i))return box(`<iframe src="https://www.youtube.com/embed/${m[1]}" allow="fullscreen" allowfullscreen loading="lazy" title="Video preview"></iframe>`)+open;
+  if(m=v.match(/vimeo\.com\/(\d+)/i))return box(`<iframe src="https://player.vimeo.com/video/${m[1]}" allow="fullscreen" allowfullscreen loading="lazy" title="Video preview"></iframe>`)+open;
+  if(/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(v))return `<video class="pvid" src="${esc(v)}" controls playsinline preload="metadata"></video>`+open;
+  return '';}
 function postCard(p){
   const nm=((me&&me.role!=='admin')?CNAME:(clients.find(c=>c.id===cid)||{}).name)||'Your brand';
   const t=thumbUrl(p.visual,'w1000');
   const av=LOGO?`<img class="av" src="${esc(LOGO)}" alt="" onerror="this.remove()">`:`<span class="av">${esc(nm.trim().charAt(0).toUpperCase()||'?')}</span>`;
-  const img=t?`<img class="pimg" src="${t}" alt="Post visual" loading="lazy" onerror="this.remove()">`:(p.visual?`<div class="pb">${vis(p.visual)}</div>`:'');
+  const vd=videoEmbed(p);
+  const img=vd||(t?`<img class="pimg" src="${t}" alt="Post visual" loading="lazy" onerror="this.remove()">`:(p.visual?`<div class="pb">${vis(p.visual)}</div>`:''));
   const txt=`<div class="pb">${p.caption?esc(p.caption):'<i style="color:var(--mute)">No caption yet.</i>'}${p.hashtags?`<div class="ptags">${esc(p.hashtags)}</div>`:''}</div>`;
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'}):'';
   const first=p.platform==='Instagram'||p.platform==='TikTok';
@@ -349,7 +359,7 @@ function adminView(){
   const tiles=mp.some(p=>M.some(([k])=>p[k]!=null))?M.filter(([k])=>tot(k)>0).map(([k,l])=>`<div class="stat"><b>${tot(k).toLocaleString()}</b>${l}</div>`).join(''):'';
   // mix warning
   const byP={};mp.forEach(p=>byP[p.pillar]=(byP[p.pillar]||0)+1);
-  const over=Object.entries(byP).filter(([k,v])=>mp.length&&v/mp.length*100>MIX&&k!=='undefined'&&k!=='null');
+  const over=Object.entries(byP).filter(([k,v])=>mp.length>=5&&v/mp.length*100>MIX&&k!=='undefined'&&k!=='null');
   // weekly pace (current week, Mon–Sun)
   const now=new Date(),mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);
@@ -365,7 +375,7 @@ function adminView(){
   }
   $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
-  ${viewbar('month')}<div class="sumrow"><b>${mp.length} posts</b>${STATUS.map(x=>`<span class="sb s-${x}">${cnt(x)} ${x==='Approved'?'approved by you':x}</span>`).join('')}<span class="sb b-Approved">${mp.filter(p=>p.approval==='Approved').length} approved by client</span><span class="sb b-Pending">${mp.filter(p=>p.approval==='Pending').length} awaiting client</span><span class="sb b-Changes">${need} need attention</span></div>
+  ${viewbar('month')}<div class="sumrow"><b>${mp.length} post${mp.length===1?'':'s'}</b>${STATUS.map(x=>`<span class="sb s-${x}">${cnt(x)} ${x==='Approved'?'approved by you':x}</span>`).join('')}<span class="sb b-Approved">${mp.filter(p=>p.approval==='Approved').length} approved by client</span><span class="sb b-Pending">${mp.filter(p=>p.approval==='Pending').length} awaiting client</span><span class="sb b-Changes">${need} need attention</span></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
   ${nc}
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
@@ -773,8 +783,8 @@ async function postForm(p={}){
   d.showModal();
   $('#cx').onclick=()=>d.close();
   $('#pf').status.onchange=e=>{$('#resw').style.display=e.target.value==='Posted'?'block':'none';};
-  const updPv=()=>{const f=$('#pf');$('#pvw').innerHTML=postCard({...p,platform:f.platform.value,caption:f.caption.value,visual:f.visual.value,hashtags:f.hashtags.value,post_date:f.post_date.value});};
-  ['platform','caption','visual','hashtags','post_date'].forEach(n=>$('#pf')[n].addEventListener('input',updPv));updPv();
+  const updPv=()=>{const f=$('#pf');$('#pvw').innerHTML=postCard({...p,platform:f.platform.value,format:f.format.value,caption:f.caption.value,visual:f.visual.value,hashtags:f.hashtags.value,post_date:f.post_date.value});};
+  ['platform','format','caption','visual','hashtags','post_date'].forEach(n=>$('#pf')[n].addEventListener('input',updPv));updPv();
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
   const updV=()=>{const v=$('#pf').visual.value;$('#vl').innerHTML=/^https?:\/\//i.test(v.trim())?vis(v):'';};
   $('#pf').visual.oninput=updV;updV();
