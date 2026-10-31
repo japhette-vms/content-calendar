@@ -47,6 +47,16 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
 dialog::backdrop{background:#0008}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 .err{color:#c2410c;font-size:14px;min-height:20px}
+.wd{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:10px}
+.wd h3{margin:0 0 6px;font-size:15px}.wd.today{border-color:var(--acc)}
+.wp{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding:8px 0;width:100%;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0;border-radius:0}
+.wp i{width:6px;align-self:stretch;border-radius:3px;flex:none}
+.wp .meta{color:var(--mute);font-size:13px}
+.pt{display:none}
+@media print{header,.noprint,.legend,dialog{display:none!important}.pt{display:block}
+body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
+.wd{border:1px solid #bbb;background:#fff;break-inside:avoid}.wp{break-inside:avoid;color:#000}.wp .meta,.cap{color:#444}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 @media(max-width:640px){.day{min-height:60px}.chip{font-size:10px}}
 </style>
 </head>
@@ -113,7 +123,9 @@ const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}<button id="out
 function bindOut(){$('#out').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};}
 
 /* ---------- Admin ---------- */
+let vw='month',wkStart=null;
 function adminView(){
+  if(vw==='week') return weekView();
   const y=month.getFullYear(),m=month.getMonth();
   const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
   const cnt=s=>mp.filter(p=>p.status===s).length;
@@ -134,7 +146,7 @@ function adminView(){
     const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
     cells+=`<div class="day${d.getMonth()!==m?' off':''}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
@@ -148,7 +160,39 @@ function adminView(){
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
   $('#np').onclick=()=>postForm();
   $('#st').onclick=()=>settingsForm();
+  $('#vwb').onclick=()=>{vw='week';const n=new Date();wkStart=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));adminView();};
   document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+}
+
+function weekView(){
+  const days=[...Array(7)].map((_,i)=>{const d=new Date(wkStart);d.setDate(wkStart.getDate()+i);return d;});
+  const fmt=d=>d.toLocaleDateString('en',{day:'numeric',month:'short'});
+  const range=fmt(days[0])+' – '+fmt(days[6])+' '+days[6].getFullYear();
+  const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  const todayS=iso(new Date());
+  const body=days.map(d=>{
+    const ds=iso(d);
+    const ps=posts.filter(p=>p.post_date===ds).sort((a,b)=>(a.post_time||'99').localeCompare(b.post_time||'99'));
+    const kds=keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:13px">★ ${esc(k.label)}</div>`).join('');
+    return `<div class="wd${ds===todayS?' today':''}"><h3>${d.toLocaleDateString('en',{weekday:'long',day:'numeric',month:'long'})}</h3>${kds}
+    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
+    <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
+  }).join('');
+  const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="pr">Print</button><button class="p" id="np">New post</button>`)+
+  `<main><div class="pt"><h2 style="margin:0">${esc(cname)} – content plan</h2></div>
+  <div class="row noprint"><button id="pw" aria-label="Previous week">‹</button><h2 style="margin:0;flex:1;text-align:center">${range}</h2><button id="nw" aria-label="Next week">›</button></div>
+  <h2 class="pt" style="text-align:center">${range}</h2>
+  <div class="pace" style="margin:12px 0">${PLATFORMS.map(pl=>`<div class="stat"><b>${wk.filter(p=>p.platform===pl).length} / ${GOALS[pl]??0}</b>${pl}</div>`).join('')}</div>
+  ${body}</main>`;
+  bindOut();
+  $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
+  $('#vwb').onclick=()=>{vw='month';adminView();};
+  $('#pr').onclick=()=>window.print();
+  $('#np').onclick=()=>postForm();
+  $('#pw').onclick=()=>{wkStart.setDate(wkStart.getDate()-7);adminView();};
+  $('#nw').onclick=()=>{wkStart.setDate(wkStart.getDate()+7);adminView();};
+  document.querySelectorAll('.wp').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
 }
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
