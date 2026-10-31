@@ -119,8 +119,12 @@ async function loadPosts(){
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
 }
-const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}<button id="out">Log out</button></header>`;
-function bindOut(){$('#out').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};}
+const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
+function bindOut(){
+  $('#out').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};
+  if($('#tl')) $('#tl').onclick=toolsForm;
+  if($('#hp')) $('#hp').onclick=()=>helpForm();
+}
 
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null;
@@ -234,6 +238,120 @@ function reportView(){
   $('#pr').onclick=()=>window.print();
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
+}
+
+/* ---------- Tools: add client, Excel import, help ---------- */
+function toolsForm(){
+  const d=$('#dlg');
+  d.innerHTML=`<h2 style="margin-top:0">Tools</h2>
+  <div style="display:grid;gap:8px">
+  <button type="button" id="t1">Add a client</button>
+  <button type="button" id="t2">Import posts from Excel</button>
+  <button type="button" id="t3">Help guide</button></div>
+  <div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
+  d.showModal();
+  $('#cx').onclick=()=>d.close();
+  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);
+}
+function addClientForm(){
+  const d=$('#dlg');
+  d.innerHTML=`<form id="af"><h2 style="margin-top:0">Add a client</h2>
+  <p><b>Step 1</b> (in Supabase): Authentication, Users, Add user, Create new user. Type the client's email and a password, tick <b>Auto Confirm User</b>, then create it.</p>
+  <p><b>Step 2</b> (here): type the client's name and the same email.</p>
+  <label>Client name</label><input name="n" required>
+  <label>Client login email</label><input name="e" type="email" required>
+  <p class="err" id="ae"></p>
+  <div class="row"><button class="p">Add client</button><button type="button" id="cx">Cancel</button></div></form>`;
+  d.showModal();
+  $('#cx').onclick=()=>d.close();
+  $('#af').onsubmit=async ev=>{ev.preventDefault();
+    const f=Object.fromEntries(new FormData(ev.target));
+    const r=await sb.rpc('add_client',{p_name:f.n.trim(),p_email:f.e.trim()});
+    if(r.error) return $('#ae').textContent='Could not add: '+r.error.message;
+    const c=await sb.from('clients').select('*').order('name');
+    clients=c.data||[];cid=r.data;
+    await loadPosts();d.close();vw='month';adminView();
+    alert('Client added. Tell them to log in with that email and the password you set. You can now set their goals and pillars in Settings.');};
+}
+function loadXLSX(){return window.XLSX?Promise.resolve():new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('Could not load the Excel reader. Check your internet connection.'));document.head.appendChild(sc);});}
+const XMAP={'date':'post_date','time (client)':'post_time','platform':'platform','content pillar':'pillar','format':'format','campaign / promo':'campaign','post copy / caption':'caption','visual / photo (link or status)':'visual','hashtags / tags (pick a set or type)':'hashtags','status':'status','client approval':'approval','assets ready?':'assets_ready','live link':'live_link','notes':'notes','reach':'reach','likes':'likes','comments':'comments_count','shares / saves':'shares_saves','dms / inquiries':'dms_inquiries','link clicks':'link_clicks','engagements':'engagements','asset due date':'asset_due_date','location(s)':'locations','content type':'content_type','approved by':'approved_by','approved on':'approved_on','repost?':'repost','cta (call to action)':'cta','tracking link (utm)':'tracking_url'};
+function parseWorkbook(buf){
+  const wb=XLSX.read(buf,{type:'array'});
+  const name=wb.SheetNames.includes('Posts')?'Posts':wb.SheetNames.find(n=>/post/i.test(n));
+  if(!name) throw new Error('No "Posts" sheet found in this file.');
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null,blankrows:false});
+  const hi=rows.findIndex(r=>{const t=r.map(x=>String(x??'').trim().toLowerCase());return t.includes('date')&&t.includes('platform');});
+  if(hi<0) throw new Error('Could not find the header row (Date, Platform...) in the Posts sheet.');
+  const hdr=rows[hi].map(x=>XMAP[String(x??'').trim().toLowerCase()]||null);
+  const txt=v=>(v==null||v==='')?null:String(v).trim();
+  const num=v=>{if(v==null||v==='')return null;const n=Number(v);return isFinite(n)?Math.round(n):null;};
+  const toDate=v=>{if(v==null||v==='')return null;if(typeof v==='number'){return new Date(Date.UTC(1899,11,30)+Math.floor(v)*86400000).toISOString().slice(0,10);}const t=String(v).trim();if(/^\d{4}-\d{2}-\d{2}/.test(t))return t.slice(0,10);const x=new Date(t);return isNaN(x)?null:iso(x);};
+  const toTime=v=>{if(typeof v==='number'){const m=Math.round((v%1)*1440);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}if(typeof v==='string'){const m=v.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);if(m){let h=+m[1];if(m[3]){const pm=/pm/i.test(m[3]);if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return String(h).padStart(2,'0')+':'+m[2];}}return null;};
+  const pick=(v,list,def)=>{const t=txt(v);if(!t)return def;return list.find(x=>x.toLowerCase()===t.toLowerCase())||def;};
+  const out=[];let skipped=0;
+  rows.slice(hi+1).forEach(r=>{
+    const o={};hdr.forEach((k,i)=>{if(k)o[k]=r[i];});
+    const date=toDate(o.post_date);
+    if(!date||!txt(o.platform)){ if(r.some(v=>v!=null&&v!=='')&&Object.values(o).some(v=>v!=null&&v!=='')) skipped++; return; }
+    const post={client_id:cid,post_date:date,post_time:toTime(o.post_time),platform:pick(o.platform,PLATFORMS,txt(o.platform)),pillar:txt(o.pillar),format:txt(o.format),campaign:txt(o.campaign),caption:txt(o.caption),visual:txt(o.visual),hashtags:txt(o.hashtags),status:pick(o.status,STATUS,'Draft'),approval:pick(o.approval,APPR,'Pending'),assets_ready:txt(o.assets_ready),live_link:txt(o.live_link),notes:txt(o.notes),asset_due_date:toDate(o.asset_due_date),locations:txt(o.locations),content_type:txt(o.content_type),repost:/^y/i.test(txt(o.repost)||''),cta:txt(o.cta),tracking_url:txt(o.tracking_url),reach:num(o.reach),likes:num(o.likes),comments_count:num(o.comments_count),shares_saves:num(o.shares_saves),dms_inquiries:num(o.dms_inquiries),link_clicks:num(o.link_clicks),engagements:num(o.engagements)};
+    if(post.engagements==null&&(post.likes!=null||post.comments_count!=null||post.shares_saves!=null)) post.engagements=(post.likes||0)+(post.comments_count||0)+(post.shares_saves||0);
+    if(post.approval==='Approved'){post.approved_by=txt(o.approved_by);post.approved_on=toDate(o.approved_on);}
+    out.push(post);
+  });
+  return {posts:out,skipped};
+}
+function importForm(){
+  const d=$('#dlg');const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  if(!cid){alert('Add a client first.');return;}
+  d.innerHTML=`<h2 style="margin-top:0">Import posts from Excel</h2>
+  <p>Posts will be added to <b>${esc(cname)}</b>. Use the Posts sheet of the content calendar workbook. Posts already in the app are kept, so importing the same file twice makes duplicates.</p>
+  <input type="file" id="xf" accept=".xlsx,.xlsm"><div id="xo" style="margin:12px 0"></div>
+  <div class="row"><button type="button" class="p" id="xgo" style="display:none">Import</button><button type="button" id="cx">Close</button></div>`;
+  d.showModal();
+  $('#cx').onclick=()=>d.close();
+  let found=null;
+  $('#xf').onchange=async ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    $('#xo').textContent='Reading the file...';$('#xgo').style.display='none';
+    try{
+      await loadXLSX();
+      found=parseWorkbook(await f.arrayBuffer());
+      if(!found.posts.length){$('#xo').innerHTML='<span class="err">No posts with a date and platform were found in that file.</span>';return;}
+      const ds=found.posts.map(p=>p.post_date).sort();
+      const unk=[...new Set(found.posts.map(p=>p.pillar).filter(x=>x&&!PILLARS[x]))];
+      $('#xo').innerHTML=`Found <b>${found.posts.length}</b> posts, from ${ds[0]} to ${ds[ds.length-1]}.${found.skipped?` ${found.skipped} row(s) skipped (no date or platform).`:''}${unk.length?`<div class="warn">Pillars not in this client's settings: ${esc(unk.join(', '))}. They import fine, but add them in Settings to give them a colour.</div>`:''}`;
+      $('#xgo').textContent='Import '+found.posts.length+' posts';$('#xgo').style.display='';
+    }catch(err){$('#xo').innerHTML='<span class="err">'+esc(err.message)+'</span>';}
+  };
+  $('#xgo').onclick=async()=>{
+    if(!found)return;$('#xgo').disabled=true;$('#xo').textContent='Importing...';
+    for(let i=0;i<found.posts.length;i+=100){
+      const r=await sb.from('posts').insert(found.posts.slice(i,i+100));
+      if(r.error){$('#xo').innerHTML='<span class="err">Stopped: '+esc(r.error.message)+'. Posts before this batch may already have been added; check the calendar before trying again.</span>';$('#xgo').disabled=false;return;}
+    }
+    d.close();await loadPosts();vw='month';adminView();alert('Imported '+found.posts.length+' posts.');
+  };
+}
+function helpForm(admin){
+  const d=$('#dlg');const isA=admin||(me&&me.role==='admin');
+  d.innerHTML=isA?`<h2 style="margin-top:0">Help guide</h2>
+  <h3>Everyday use</h3><ul><li><b>New post</b>: fill in the form and Save. Click a post on the calendar to edit it, or to read the client's comments.</li>
+  <li><b>Client approval</b> starts as Pending. The client approves or asks for changes in their own login; you will see ✓ or (!) on the calendar.</li>
+  <li><b>Week view</b> shows one week in detail. <b>Print</b> makes a clean page.</li>
+  <li><b>Results</b>: after a post is live, open it and type the numbers under Results.</li>
+  <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
+  <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
+  <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
+  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li></ul>
+  <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
+  :`<h2 style="margin-top:0">How to use this calendar</h2>
+  <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
+  <li>Click <b>Approve</b> if the post is good to go, or <b>Request changes</b> and add a comment saying what to change.</li>
+  <li>Use <b>View all posts</b> to see a list. The filter at the top can show only posts waiting for your approval.</li>
+  <li>You can add a comment on any post. Your social media manager will see it.</li></ul>
+  <p style="color:var(--mute)">You can only see your own calendar. Questions? Contact your social media manager.</p>`;
+  d.innerHTML+=`<div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
+  d.showModal();$('#cx').onclick=()=>d.close();
 }
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
