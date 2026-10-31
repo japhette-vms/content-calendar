@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Content Calendar</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg"><meta name="theme-color" content="#4b3fd6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -60,6 +61,8 @@ body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
 .wd{border:1px solid #bbb;background:#fff;break-inside:avoid}.wp{break-inside:avoid;color:#000}.wp .meta,.cap{color:#444}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 @media(max-width:640px){.day{min-height:60px}.chip{font-size:11px}}
+.agenda{display:none}
+@media(max-width:640px){.grid{display:none}.agenda{display:block}button,select,input,textarea{min-height:44px}.chip,.more{min-height:0}.stickybar{position:sticky;bottom:0;background:var(--card);padding:10px 0;border-top:1px solid var(--line)}.stickybar button{flex:1}}
 .more{display:block;width:100%;text-align:left;margin-top:3px;padding:2px 5px;border:0;border-radius:5px;background:var(--line);color:var(--ink);font-size:12px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;display:none;gap:12px;align-items:center;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:90vw}
 #toast button{background:none;color:inherit;border:1px solid currentColor;padding:3px 10px}
@@ -143,6 +146,9 @@ async function loadPosts(){
   const ord=Object.keys(DEF_P);
   PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=safeCol(rawP[k]));
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
+  // Posts saved under a pillar name that is not in Settings (e.g. after a rename) get a steady colour instead of grey.
+  const hsl=(h,sa,l)=>{l/=100;const a=sa*Math.min(l,1-l)/100,f=n=>{const k=(n+h/30)%12,c=l-a*Math.max(Math.min(k-3,9-k,1),-1);return Math.round(255*c).toString(16).padStart(2,'0');};return '#'+f(0)+f(8)+f(4);};
+  posts.forEach(p=>{const n=(p.pillar||'').trim();if(n&&!PILLARS[n]){let h=0;for(const ch of n)h=(h*31+ch.charCodeAt(0))%360;PILLARS[n]=hsl(h,60,33);}});
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
   hsets=adm?((hs&&hs.data)||[]):[];
   BRAND=HEX.test(s.brand_color||'')?s.brand_color:null;LOGO=s.logo_url||'';TZ=s.tz||'America/Denver';applyBrand();
@@ -209,6 +215,7 @@ function adminView(){
   ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
+  <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
   <p class="noprint" style="color:var(--mute);font-size:13px;margin:0">Tip: drag a post onto another day to reschedule it.</p>
   <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}${chk}</main>`;
   bindOut();
@@ -218,6 +225,7 @@ function adminView(){
   $('#np').onclick=()=>postForm();
   $('#st').onclick=()=>settingsForm();
   $('#icb').onclick=exportIcs;
+  document.querySelectorAll('.agenda .wp').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
   document.querySelectorAll('.more').forEach(b=>b.onclick=()=>{const dd=new Date(b.dataset.wk+'T00:00');wkStart=new Date(dd.getFullYear(),dd.getMonth(),dd.getDate()-((dd.getDay()+6)%7));vw='week';adminView();});
   $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#yrb').onclick=()=>{vw='year';yr=month.getFullYear();adminView();};
@@ -629,7 +637,7 @@ function settingsForm(){
   d.innerHTML=`<form id="sf"><h2 style="margin-top:0">Settings for ${esc(clients.find(c=>c.id===cid)?.name)}</h2>
   <h3>Weekly post goals</h3><div class="g2">${PLATFORMS.map(p=>`<div><label>${p}</label><input type="number" min="0" name="g:${p}" value="${GOALS[p]??0}"></div>`).join('')}</div>
   <h3>Content pillars</h3>${pl.map(([n,c],i)=>`<div class="row" style="margin-top:6px"><input name="pn${i}" value="${esc(n)}" placeholder="New pillar" style="flex:1"><input type="color" name="pc${i}" value="${c}" style="width:56px;padding:2px"></div>`).join('')}
-  <p style="font-size:12px;color:var(--mute)">Renaming a pillar does not change posts already saved under the old name.</p>
+  <p style="font-size:12px;color:var(--mute)">Renaming a pillar also updates this client\u2019s existing posts.</p>
   <div class="g2"><div><label>Warn when one pillar is over (%)</label><input type="number" name="mix" value="${MIX}"></div><div><label>Repost gap (days)</label><input type="number" name="gap" value="${GAP}"></div></div>
   <h3>Time zone and client branding</h3>
   <label>Client time zone (used for the Manila time)</label><select name="tz">${TZS.map(([v,l])=>`<option value="${v}"${v===TZ?' selected':''}>${l}</option>`).join('')}</select>
@@ -651,6 +659,9 @@ function settingsForm(){
     PLATFORMS.forEach(p=>goals[p]=+f['g:'+p]||0);
     pl.forEach((_,i)=>{const n=(f['pn'+i]||'').trim();if(n)pillars[n]=f['pc'+i];});
     if(!Object.keys(pillars).length) return $('#se').textContent='Keep at least one pillar.';
+    for(const [o,n] of pl.map(([o],i)=>[o,(f['pn'+i]||'').trim()]).filter(([o,n])=>o&&n&&o!==n)){
+      const w=await sb.from('posts').update({pillar:n}).eq('client_id',cid).eq('pillar',o);
+      if(w.error) return $('#se').textContent='Could not rename "'+o+'": '+w.error.message;}
     const r=await sb.from('client_settings').upsert({client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75,tz:f.tz,brand_color:f.usebrand?f.brand:null,logo_url:/^https:\/\//i.test((f.logo||'').trim())?f.logo.trim():null});
     if(r.error) return $('#se').textContent='Could not save: '+r.error.message;
     d.close();await loadPosts();adminView();};
@@ -696,9 +707,11 @@ function clientView(){
   <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
   ${p.visual?`<p><b>Visual:</b> ${vis(p.visual)}</p>`:''}
   <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
-  <div class="row"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
+  <div class="row stickybar"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
   <div id="cmx" style="margin-top:14px"></div></div>`;
   $('#lv').onclick=()=>{lv=true;clientView();};
+  let x0=null;m.ontouchstart=e=>{x0=e.touches[0].clientX;};
+  m.ontouchend=e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)<70)return;if(dx<0&&idx<posts.length-1){idx++;clientView();}else if(dx>0&&idx>0){idx--;clientView();}};
   $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
   const act=async v=>{const prev=p.approval;const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
     if(r.error) return alert('Could not save: '+r.error.message);
