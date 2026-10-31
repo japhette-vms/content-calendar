@@ -78,7 +78,7 @@ const APPR=['Pending','Approved','Changes requested'];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-let me=null,user=null,clients=[],cid=null,posts=[],keyDates=[],month=new Date(),idx=0,lv=false,flt='All';
+let me=null,user=null,clients=[],cid=null,posts=[],keyDates=[],month=new Date(new Date().getFullYear(),new Date().getMonth(),1),idx=0,lv=false,flt='All';
 month.setDate(1);
 
 async function boot(){
@@ -124,12 +124,17 @@ function bindOut(){$('#out').onclick=async()=>{await sb.auth.signOut();me=null;l
 
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null;
+const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
+const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
 function adminView(){
   if(vw==='week') return weekView();
+  if(vw==='report') return reportView();
   const y=month.getFullYear(),m=month.getMonth();
   const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
   const cnt=s=>mp.filter(p=>p.status===s).length;
   const need=mp.filter(p=>flag(p)).length;
+  const tot=k=>mp.reduce((a,p)=>a+(+p[k]||0),0);
+  const tiles=mp.some(p=>M.some(([k])=>p[k]!=null))?M.filter(([k])=>tot(k)>0).map(([k,l])=>`<div class="stat"><b>${tot(k).toLocaleString()}</b>${l}</div>`).join(''):'';
   // mix warning
   const byP={};mp.forEach(p=>byP[p.pillar]=(byP[p.pillar]||0)+1);
   const over=Object.entries(byP).filter(([k,v])=>mp.length&&v/mp.length*100>MIX&&k!=='undefined'&&k!=='null');
@@ -146,9 +151,10 @@ function adminView(){
     const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
     cells+=`<div class="day${d.getMonth()!==m?' off':''}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="rpb">Report</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
+  ${tiles?`<div class="stats">${tiles}</div>`:''}
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
   ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
@@ -160,6 +166,7 @@ function adminView(){
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
   $('#np').onclick=()=>postForm();
   $('#st').onclick=()=>settingsForm();
+  $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#vwb').onclick=()=>{vw='week';const n=new Date();wkStart=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));adminView();};
   document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
 }
@@ -179,7 +186,7 @@ function weekView(){
     <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
   }).join('');
   const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="pr">Print</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="rpb">Report</button><button id="pr">Print</button><button class="p" id="np">New post</button>`)+
   `<main><div class="pt"><h2 style="margin:0">${esc(cname)} – content plan</h2></div>
   <div class="row noprint"><button id="pw" aria-label="Previous week">‹</button><h2 style="margin:0;flex:1;text-align:center">${range}</h2><button id="nw" aria-label="Next week">›</button></div>
   <h2 class="pt" style="text-align:center">${range}</h2>
@@ -189,10 +196,44 @@ function weekView(){
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#vwb').onclick=()=>{vw='month';adminView();};
   $('#pr').onclick=()=>window.print();
+  $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#np').onclick=()=>postForm();
   $('#pw').onclick=()=>{wkStart.setDate(wkStart.getDate()-7);adminView();};
   $('#nw').onclick=()=>{wkStart.setDate(wkStart.getDate()+7);adminView();};
   document.querySelectorAll('.wp').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+}
+
+function reportView(){
+  const y=month.getFullYear(),m=month.getMonth();
+  const mp=posts.filter(p=>inMonth(p,y,m)).sort((a,b)=>a.post_date.localeCompare(b.post_date));
+  const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  const title=month.toLocaleString('en',{month:'long',year:'numeric'});
+  const tot=k=>mp.reduce((a,p)=>a+(+p[k]||0),0);
+  const cntBy=(f,vals)=>vals.map(v=>[v,mp.filter(p=>p[f]===v).length]);
+  const score=p=>(+p.engagements||0)||((+p.likes||0)+(+p.comments_count||0)+(+p.shares_saves||0));
+  const top=mp.filter(p=>score(p)>0).sort((a,b)=>score(b)-score(a)).slice(0,3);
+  const hasRes=M.some(([k])=>tot(k)>0);
+  const box=(n,l)=>`<div class="stat"><b>${n}</b>${l}</div>`;
+  const bar=(label,n,color)=>`<div class="row" style="gap:8px;margin:3px 0;flex-wrap:nowrap"><span style="width:170px;flex:none">${esc(label)}</span><div style="flex:1;background:var(--line);border-radius:4px;height:12px"><div style="width:${mp.length?Math.round(n/mp.length*100):0}%;background:${color};height:12px;border-radius:4px"></div></div><b style="width:24px;text-align:right">${n}</b></div>`;
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="pr">Print / save as PDF</button>`)+
+  `<main><div class="row noprint"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${title}</h2><button id="nm" aria-label="Next month">›</button></div>
+  <h1 style="margin:14px 0 2px;font-size:24px">${esc(cname)}: ${title} report</h1>
+  <p style="color:var(--mute);margin:0 0 10px">Social media content summary</p>
+  <h3>Posting summary</h3>
+  <div class="stats">${box(mp.length,'Posts planned')}${box(mp.filter(p=>p.status==='Posted').length,'Posted')}${box(mp.filter(p=>p.status==='Scheduled').length,'Scheduled')}${box(mp.filter(p=>p.approval==='Approved').length,'Approved by you')}${box(mp.filter(p=>p.approval==='Changes requested').length,'Changes requested')}${box(mp.filter(p=>p.approval==='Pending').length,'Awaiting approval')}</div>
+  <h3>Posts by platform</h3>${cntBy('platform',PLATFORMS).map(([k,n])=>bar(k,n,'#8d83ff')).join('')}
+  <h3>Posts by content pillar</h3>${cntBy('pillar',Object.keys(PILLARS)).map(([k,n])=>bar(k,n,PILLARS[k])).join('')}
+  <h3>Results</h3>${hasRes?`<div class="stats">${M.filter(([k])=>tot(k)>0).map(([k,l])=>box(tot(k).toLocaleString(),l)).join('')}</div>`:'<p style="color:var(--mute)">No results entered yet for this month.</p>'}
+  ${top.length?`<h3>Top posts</h3>${top.map((p,i)=>`<div class="wd"><b>${i+1}. ${esc(p.platform)}</b> <span style="color:var(--mute)">${esc(p.post_date)} · ${esc(p.format)} · ${esc(p.pillar)}</span><div>${esc((p.caption||'').slice(0,160))}</div><div style="color:var(--mute);font-size:13px">${M.filter(([k])=>+p[k]>0).map(([k,l])=>l+': '+p[k]).join(' · ')}</div></div>`).join('')}`:''}
+  <h3>All posts</h3><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:var(--mute)"><th>Date</th><th>Platform</th><th>Format</th><th>Pillar</th><th>Status</th><th>Reach</th><th>Engagements</th></tr>
+  ${mp.map(p=>`<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px 4px 0">${esc(p.post_date)}</td><td>${esc(p.platform)}</td><td>${esc(p.format)}</td><td>${esc(p.pillar)}</td><td>${esc(p.status)}</td><td>${p.reach??''}</td><td>${p.engagements??''}</td></tr>`).join('')||'<tr><td colspan="7">No posts this month.</td></tr>'}</table></div>
+  </main>`;
+  bindOut();
+  $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
+  $('#vwb').onclick=()=>{vw='month';adminView();};
+  $('#pr').onclick=()=>window.print();
+  $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
+  $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
 }
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
@@ -212,6 +253,8 @@ async function postForm(p={}){
   <label>Post copy / caption</label><textarea name="caption" rows="4">${esc(p.caption)}</textarea>
   <label>Visual / photo</label><input name="visual" value="${esc(p.visual)}">
   <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">
+  <h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
+  <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div>
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
   <div id="cmx"></div>
   <p class="err" id="pe"></p>
@@ -222,6 +265,7 @@ async function postForm(p={}){
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const f=Object.fromEntries(new FormData(e.target));
     f.post_time=f.post_time||null;f.client_id=cid;
+    M.forEach(([k])=>{f[k]=(f[k]===''||f[k]==null)?null:+f[k];});
     if(f.approval!==p.approval&&f.approval==='Pending'){f.approved_by=null;f.approved_on=null;}
     const r=p.id?await sb.from('posts').update(f).eq('id',p.id):await sb.from('posts').insert(f);
     if(r.error) return $('#pe').textContent='Could not save: '+r.error.message;
