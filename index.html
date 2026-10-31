@@ -58,7 +58,7 @@ dialog{max-height:90vh;overflow:auto}
 .pt{display:none}
 @media print{header,.noprint,.legend,dialog{display:none!important}.pt{display:block}
 body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
-.wd{border:1px solid #bbb;background:#fff;break-inside:avoid}.wp{break-inside:avoid;color:#000}.wp .meta,.cap{color:#444}
+.wd{border:1px solid #bbb;background:#fff;break-inside:avoid}tr{break-inside:avoid}h3{break-after:avoid}table{color:#000}.wp{break-inside:avoid;color:#000}.wp .meta,.cap{color:#444}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 @media(max-width:640px){.day{min-height:60px}.chip{font-size:11px}}
 .agenda{display:none}
@@ -75,6 +75,7 @@ body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
 <script>
 const SB_URL='https://ognxncsuxhaewpvxrcwi.supabase.co';
 const SB_KEY='sb_publishable_hxHsGW9la9lXCsK9pnwe6A_ANQjFJ3u';
+const INVITED=/type=invite/.test(location.hash);
 const sb=supabase.createClient(SB_URL,SB_KEY);
 // Clients read from this source. After running rls-hardening.sql, change to 'client_posts' to hide notes/results at the database level.
 const CLIENT_SRC='posts';
@@ -212,7 +213,7 @@ function adminView(){
   ${tiles?`<div class="stats">${tiles}</div>`:''}
   ${nc}
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
-  ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
+  ${clients.length?'':'<div class="warn">No clients yet. Use Tools, Add a client to invite your first one.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
   <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
@@ -285,8 +286,7 @@ function reportView(){
   const bar=(label,n,color)=>`<div class="row" style="gap:8px;margin:3px 0;flex-wrap:nowrap"><span style="width:170px;flex:none">${esc(label)}</span><div style="flex:1;background:var(--line);border-radius:4px;height:12px"><div style="width:${mp.length?Math.round(n/mp.length*100):0}%;background:${color};height:12px;border-radius:4px"></div></div><b style="width:24px;text-align:right">${n}</b></div>`;
   $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="pr">Print / save as PDF</button>`)+
   `<main><div class="row noprint"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${title}</h2><button id="nm" aria-label="Next month">›</button></div>
-  <h1 style="margin:14px 0 2px;font-size:24px">${esc(cname)}: ${title} report</h1>
-  <p style="color:var(--mute);margin:0 0 10px">Social media content summary</p>
+  <div style="border-bottom:3px solid ${BRAND||'var(--acc)'};padding-bottom:10px;margin:14px 0 10px;display:flex;gap:12px;align-items:center">${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:44px">`:''}<div><h1 style="margin:0;font-size:24px">${esc(cname)}: ${title} report</h1><p style="color:var(--mute);margin:2px 0 0">Social media content summary · prepared ${new Date().toLocaleDateString('en',{day:'numeric',month:'long',year:'numeric'})}</p></div></div>
   <h3>Posting summary</h3>
   <div class="stats">${box(mp.length,'Posts planned')}${box(mp.filter(p=>p.status==='Posted').length,'Posted')}${box(mp.filter(p=>p.status==='Scheduled').length,'Scheduled')}${box(mp.filter(p=>p.approval==='Approved').length,'Approved by you')}${box(mp.filter(p=>p.approval==='Changes requested').length,'Changes requested')}${box(mp.filter(p=>p.approval==='Pending').length,'Awaiting approval')}</div>
   <h3>Posts by platform</h3>${cntBy('platform',PLATFORMS).map(([k,n])=>bar(k,n,'#8d83ff')).join('')}
@@ -299,7 +299,7 @@ function reportView(){
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#vwb').onclick=()=>{vw='month';adminView();};
-  $('#pr').onclick=()=>window.print();
+  $('#pr').onclick=()=>{const t=document.title;document.title=cname.replace(/[^\w-]+/g,'_')+'_'+title.replace(/\s+/g,'_')+'_report';window.print();document.title=t;};
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
 }
@@ -324,22 +324,24 @@ function toolsForm(){
 function addClientForm(){
   const d=$('#dlg');
   d.innerHTML=`<form id="af"><h2 style="margin-top:0">Add a client</h2>
-  <p><b>Step 1</b> (in Supabase): Authentication, Users, Add user, Create new user. Type the client's email and a password, tick <b>Auto Confirm User</b>, then create it.</p>
-  <p><b>Step 2</b> (here): type the client's name and the same email.</p>
+  <p>Type the client's name and email. They get an email with a link to choose their own password.</p>
   <label>Client name</label><input name="n" required>
   <label>Client login email</label><input name="e" type="email" required>
   <p class="err" id="ae"></p>
-  <div class="row"><button class="p">Add client</button><button type="button" id="cx">Cancel</button></div></form>`;
+  <div class="row"><button class="p" id="ab">Add and send invite</button><button type="button" id="cx">Cancel</button></div></form>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
   $('#af').onsubmit=async ev=>{ev.preventDefault();
     const f=Object.fromEntries(new FormData(ev.target));
-    const r=await sb.rpc('add_client',{p_name:f.n.trim(),p_email:f.e.trim()});
-    if(r.error) return $('#ae').textContent='Could not add: '+r.error.message;
+    $('#ab').disabled=true;$('#ae').textContent='Sending...';
+    const r=await sb.functions.invoke('invite-client',{body:{name:f.n.trim(),email:f.e.trim()}});
+    let msg=r.error?r.error.message:((r.data&&r.data.error)||'');
+    if(r.error&&r.error.context&&r.error.context.json){try{const j=await r.error.context.json();msg=j.error||msg;}catch(_){}}
+    if(msg){$('#ab').disabled=false;return $('#ae').textContent='Could not add: '+msg;}
     const c=await sb.from('clients').select('*').order('name');
-    clients=c.data||[];cid=r.data;
+    clients=c.data||[];cid=r.data.client_id;
     await loadPosts();d.close();vw='month';adminView();
-    alert('Client added. Tell them to log in with that email and the password you set. You can now set their goals and pillars in Settings.');};
+    alert('Client added and invite sent to '+f.e.trim()+'. You can now set their goals and pillars in Settings.');};
 }
 function loadXLSX(){return window.XLSX?Promise.resolve():new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';sc.onload=res;sc.onerror=()=>rej(new Error('Could not load the Excel reader. Check your internet connection.'));document.head.appendChild(sc);});}
 const XMAP={'date':'post_date','time (client)':'post_time','platform':'platform','content pillar':'pillar','format':'format','campaign / promo':'campaign','post copy / caption':'caption','visual / photo (link or status)':'visual','hashtags / tags (pick a set or type)':'hashtags','status':'status','client approval':'approval','assets ready?':'assets_ready','live link':'live_link','notes':'notes','reach':'reach','likes':'likes','comments':'comments_count','shares / saves':'shares_saves','dms / inquiries':'dms_inquiries','link clicks':'link_clicks','engagements':'engagements','asset due date':'asset_due_date','location(s)':'locations','content type':'content_type','approved by':'approved_by','approved on':'approved_on','repost?':'repost','cta (call to action)':'cta','tracking link (utm)':'tracking_url'};
@@ -416,7 +418,7 @@ function helpForm(admin){
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
-  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li><li><b>Export posts to CSV</b>: downloads the selected client's posts as a spreadsheet backup. <b>Change my password</b> is here too.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
+  <h3>Tools</h3><ul><li><b>Add a client</b>: type their name and email. They are emailed an invite to choose their own password.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li><li><b>Export posts to CSV</b>: downloads the selected client's posts as a spreadsheet backup. <b>Change my password</b> is here too.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
   <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
   :`<h2 style="margin-top:0">How to use this calendar</h2>
   <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
@@ -538,8 +540,8 @@ function tzOff(ms,tz){const f=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourC
 function toManila(ds,ts,tz){try{if(!ds||!ts)return '';const [y,m,d]=ds.split('-').map(Number),[h,mi]=ts.slice(0,5).split(':').map(Number);
   const g=Date.UTC(y,m-1,d,h,mi);let t=g-tzOff(g,tz);t=g-tzOff(t,tz);
   return new Date(t).toLocaleString('en-US',{timeZone:'Asia/Manila',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(e){return '';}}
-function pwForm(){const d=$('#dlg');
-  d.innerHTML=`<form id="wf"><h2 style="margin-top:0">Change password</h2><label>New password (at least 8 characters)</label><input name="a" type="password" minlength="8" required autocomplete="new-password"><label>Type it again</label><input name="b" type="password" minlength="8" required autocomplete="new-password"><p class="err" id="we"></p><div class="row"><button class="p">Change password</button><button type="button" id="cx">Cancel</button></div></form>`;
+function pwForm(welcome){const d=$('#dlg');
+  d.innerHTML=`<form id="wf"><h2 style="margin-top:0">${welcome===true?'Welcome! Choose your password':'Change password'}</h2><label>New password (at least 8 characters)</label><input name="a" type="password" minlength="8" required autocomplete="new-password"><label>Type it again</label><input name="b" type="password" minlength="8" required autocomplete="new-password"><p class="err" id="we"></p><div class="row"><button class="p">${welcome===true?'Save password':'Change password'}</button><button type="button" id="cx">Cancel</button></div></form>`;
   if(!d.open) d.showModal();$('#cx').onclick=()=>d.close();
   $('#wf').onsubmit=async ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
     if(f.a!==f.b) return $('#we').textContent='The two passwords do not match.';
@@ -552,7 +554,7 @@ function exportIcs(){
   const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Content Calendar//EN'];
   ps.forEach(p=>{L.push('BEGIN:VEVENT','UID:'+p.id+'@content-calendar','DTSTAMP:'+st,
     p.post_time?'DTSTART;TZID='+TZ+':'+d8(p.post_date)+'T'+p.post_time.slice(0,5).replace(':','')+'00':'DTSTART;VALUE=DATE:'+d8(p.post_date),
-    'SUMMARY:'+e(p.platform+' ('+(p.pillar||'no pillar')+')'),'DESCRIPTION:'+e(p.caption),'END:VEVENT');});
+    'SUMMARY:'+e(p.platform+' · '+(p.pillar||'No pillar')+(p.caption?' · '+p.caption.replace(/\s+/g,' ').slice(0,40)+(p.caption.length>40?'…':''):'')+(p.status==='Posted'?' ✓':'')),'DESCRIPTION:'+e([p.caption,p.hashtags,'Status: '+p.status+' · Approval: '+(p.approval||'Pending')].filter(Boolean).join('\n\n')),'END:VEVENT');});
   L.push('END:VCALENDAR');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar;charset=utf-8'}));
   a.download=((clients.find(c=>c.id===cid)||{}).name||'client').replace(/[^\w-]+/g,'_')+'_posts.ics';
@@ -727,7 +729,7 @@ async function boot(){
   try{await boot0();}
   catch(e){$('#app').innerHTML='<div class="login"><h1 style="margin-top:0">Can\u2019t connect</h1><p>Check your internet connection and try again.</p><button class="p" id="rt" style="width:100%">Try again</button></div>';$('#rt').onclick=boot;}
 }
-boot();
+boot().then(()=>{if(INVITED&&me){history.replaceState(null,'',location.pathname);pwForm(true);}});
 </script>
 </body>
 </html>
