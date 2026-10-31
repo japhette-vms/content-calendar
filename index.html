@@ -18,7 +18,7 @@ main{max-width:1100px;margin:0 auto;padding:20px}
 button,select,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px}
 button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:500}
-button.ok{background:#1f8a5b;color:#fff;border-color:#1f8a5b}
+button.ok{background:#177a4e;color:#fff;border-color:#177a4e}
 button.bad{background:#c2410c;color:#fff;border-color:#c2410c}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
@@ -34,7 +34,7 @@ label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
 .day{background:var(--card);min-height:96px;padding:4px;font-size:12px}
 .day.off{opacity:.45}
 .day>span{color:var(--mute)}
-.chip{display:block;width:100%;text-align:left;margin-top:3px;padding:2px 5px;border:0;border-radius:5px;color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:block;width:100%;text-align:left;margin-top:3px;padding:2px 5px;border:0;border-radius:5px;color:#fff;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:10px 0}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px}
 .pace{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:14px}
@@ -59,7 +59,11 @@ dialog{max-height:90vh;overflow:auto}
 body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
 .wd{border:1px solid #bbb;background:#fff;break-inside:avoid}.wp{break-inside:avoid;color:#000}.wp .meta,.cap{color:#444}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-@media(max-width:640px){.day{min-height:60px}.chip{font-size:10px}}
+@media(max-width:640px){.day{min-height:60px}.chip{font-size:11px}}
+.more{display:block;width:100%;text-align:left;margin-top:3px;padding:2px 5px;border:0;border-radius:5px;background:var(--line);color:var(--ink);font-size:12px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;display:none;gap:12px;align-items:center;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:90vw}
+#toast button{background:none;color:inherit;border:1px solid currentColor;padding:3px 10px}
+@media (prefers-color-scheme:dark){.warn,.b-Pending{background:#4a3a10;color:#ffe3a0}.b-Approved{background:#153d2b;color:#a8ecc9}.b-Changes{background:#4d2412;color:#ffc9b0}}
 </style>
 </head>
 <body>
@@ -69,7 +73,11 @@ body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
 const SB_URL='https://ognxncsuxhaewpvxrcwi.supabase.co';
 const SB_KEY='sb_publishable_hxHsGW9la9lXCsK9pnwe6A_ANQjFJ3u';
 const sb=supabase.createClient(SB_URL,SB_KEY);
-let PILLARS={'Educational':'#7c5cd6','Promo':'#e0634f','Behind the Scenes':'#1f9a8a','Testimonials':'#d6478f','Community':'#3b7fd6','Trending':'#c98a0b','Spotlight':'#3a9a4f'};
+// Clients read from this source. After running rls-hardening.sql, change to 'client_posts' to hide notes/results at the database level.
+const CLIENT_SRC='posts';
+const CLIENT_COLS='id,client_id,post_date,post_time,platform,pillar,format,status,approval,caption,visual,hashtags,campaign';
+sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY')setTimeout(async()=>{await boot();pwForm();},0);});
+let PILLARS={'Educational':'#7c5cd6','Promo':'#c2410c','Behind the Scenes':'#0f766e','Testimonials':'#b8326f','Community':'#2f6bc4','Trending':'#9a6700','Spotlight':'#2f7d3f'};
 const PLATFORMS=['Google Business Profile','Facebook','Instagram','TikTok','LinkedIn'];
 let GOALS={'Google Business Profile':1,'Facebook':3,'Instagram':4,'TikTok':2,'LinkedIn':2};
 const DEF_P={...PILLARS},DEF_G={...GOALS};let MIX=40,GAP=75;
@@ -78,12 +86,21 @@ const STATUS=['Draft','Approved','Scheduled','Posted'];
 const MARK={Draft:'○',Approved:'□',Scheduled:'■',Posted:'●'};
 const APPR=['Pending','Approved','Changes requested'];
 const $=s=>document.querySelector(s);
+const HEX=/^#[0-9a-f]{6}$/i;
+const safeCol=c=>HEX.test(c||'')?c:'#6b6f85';
+const ink=c=>{if(!HEX.test(c||''))return '#fff';const n=parseInt(c.slice(1),16);return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255>0.6?'#14151f':'#fff';};
+function toast(msg,undo){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}
+  t.textContent='';const m=document.createElement('span');m.textContent=msg;t.appendChild(m);
+  if(undo){const b=document.createElement('button');b.textContent='Undo';b.onclick=()=>{t.style.display='none';undo();};t.appendChild(b);}
+  t.style.display='flex';clearTimeout(toast.t);toast.t=setTimeout(()=>{t.style.display='none';},undo?7000:4500);}
+const _alert=window.alert.bind(window);
+window.alert=m=>{const d=document.getElementById('dlg');d&&d.open?_alert(m):toast(String(m));};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 let me=null,user=null,clients=[],cid=null,posts=[],keyDates=[],month=new Date(new Date().getFullYear(),new Date().getMonth(),1),idx=0,lv=false,flt='All';
 month.setDate(1);
 
-async function boot(){
+async function boot0(){
   const {data:{session}}=await sb.auth.getSession();
   if(!session) return loginView();
   user=session.user;
@@ -101,29 +118,36 @@ function loginView(msg=''){
   $('#app').innerHTML=`<form class="login" id="lf"><h1 style="margin-top:0">Content Calendar</h1>
   <label for="em">Email</label><input id="em" type="email" required autocomplete="username">
   <label for="pw">Password</label><input id="pw" type="password" required autocomplete="current-password">
-  <p class="err" id="le">${esc(msg)}</p><button class="p" style="width:100%">Log in</button></form>`;
+  <p class="err" id="le">${esc(msg)}</p><button class="p" style="width:100%">Log in</button><p style="text-align:center;margin:12px 0 0"><button type="button" id="fp" style="border:0;background:none;color:var(--acc);text-decoration:underline;padding:4px">Forgot password?</button></p></form>`;
   $('#lf').onsubmit=async e=>{e.preventDefault();
     const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
     if(error) $('#le').textContent='Email or password is incorrect.'; else boot();};
+  $('#fp').onclick=async()=>{const em=$('#em').value.trim();if(!em)return $('#le').textContent='Type your email above first.';
+    const r=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname});
+    $('#le').textContent=r.error?'Could not send the link: '+r.error.message:'If that email has an account, a reset link is on its way.';};
 }
 async function loadPosts(){
   if(!cid){posts=[];return;}
-  const {data,error}=await sb.from('posts').select('*').eq('client_id',cid).order('post_date').order('post_time');
-  if(error) alert('Could not load posts: '+error.message);
-  posts=data||[];
-  const kd=await sb.from('key_dates').select('*').eq('client_id',cid).order('key_date');
+  const adm=me&&me.role==='admin';
+  const fetchPosts=async()=>{let a=[],f=0;for(;;){const r=await sb.from(adm?'posts':CLIENT_SRC).select(adm?'*':CLIENT_COLS).eq('client_id',cid).order('post_date').order('post_time').order('id').range(f,f+999);if(r.error)return {data:a,error:r.error};a=a.concat(r.data);if(r.data.length<1000)break;f+=1000;}return {data:a};};
+  const [pr,kd,st,hs,cr]=await Promise.all([fetchPosts(),
+    sb.from('key_dates').select('*').eq('client_id',cid).order('key_date'),
+    sb.from('client_settings').select('*').eq('client_id',cid).maybeSingle(),
+    adm?sb.from('hashtag_sets').select('*').eq('client_id',cid).order('name'):null,
+    adm?sb.from('comments').select('id,post_id,body,created_at,author_id').gt('created_at',seenGet(cid)).neq('author_id',user.id).order('created_at',{ascending:false}):null]);
+  if(pr.error) alert('Could not load posts: '+pr.error.message);
+  posts=pr.data||[];
   keyDates=kd.data||[];
-  const st=await sb.from('client_settings').select('*').eq('client_id',cid).maybeSingle();
   const s=st.data||{};
   const rawP=s.pillars&&Object.keys(s.pillars).length?s.pillars:{...DEF_P};
   const ord=Object.keys(DEF_P);
-  PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=rawP[k]);
+  PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=safeCol(rawP[k]));
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
-  if(me&&me.role==='admin'){const hs=await sb.from('hashtag_sets').select('*').eq('client_id',cid).order('name');hsets=hs.data||[];}else hsets=[];
-  BRAND=s.brand_color||null;LOGO=s.logo_url||'';TZ=s.tz||'America/Denver';applyBrand();
+  hsets=adm?((hs&&hs.data)||[]):[];
+  BRAND=HEX.test(s.brand_color||'')?s.brand_color:null;LOGO=s.logo_url||'';TZ=s.tz||'America/Denver';applyBrand();
   newCm=[];
-  if(me&&me.role==='admin'){const cr=await sb.from('comments').select('id,post_id,body,created_at,author_id').gt('created_at',seenGet(cid)).neq('author_id',user.id).order('created_at',{ascending:false});const ids=new Set(posts.map(x=>x.id));newCm=(cr.data||[]).filter(c=>ids.has(c.post_id));}
+  if(adm){const ids=new Set(posts.map(x=>x.id));newCm=((cr&&cr.data)||[]).filter(c=>ids.has(c.post_id));}
 }
 const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:30px;vertical-align:middle;margin-right:8px">`:''}${esc(CNAME)} Content Calendar`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
@@ -135,7 +159,10 @@ function bindOut(){
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null,hsets=[],yr=new Date().getFullYear();
 let newCm=[],BRAND=null,LOGO='',TZ='America/Denver',CNAME='';
-const vis=v=>/^https?:\/\//i.test(String(v||'').trim())?`<a class="lnk" href="${esc(String(v).trim())}" target="_blank" rel="noopener noreferrer">Open the photo or video ↗</a>`:esc(v);
+const vis=v=>{v=String(v||'').trim();if(!/^https?:\/\//i.test(v))return esc(v);
+  const m=v.match(/\/d\/([\w-]{10,})/)||v.match(/[?&]id=([\w-]{10,})/);
+  const th=/drive\.google\.com/i.test(v)&&m?`<img src="https://drive.google.com/thumbnail?id=${m[1]}&sz=w600" alt="" loading="lazy" onerror="this.remove()" style="display:block;max-width:100%;max-height:260px;border-radius:8px;margin:6px 0">`:'';
+  return th+`<a class="lnk" href="${esc(v)}" target="_blank" rel="noopener noreferrer">Open the photo or video ↗</a>`;};
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
 const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
@@ -170,10 +197,10 @@ function adminView(){
     const d=new Date(start);d.setDate(start.getDate()+i);
     if(i>=35&&d.getMonth()!==m)break;
     const ds=iso(d);
-    const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
+    const dps=posts.filter(p=>p.post_date===ds),chips=dps.slice(0,3).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('')+(dps.length>3?`<button class="more" data-wk="${ds}">+${dps.length-3} more</button>`:'');
     cells+=`<div class="day${d.getMonth()!==m?' off':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
@@ -190,6 +217,8 @@ function adminView(){
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
   $('#np').onclick=()=>postForm();
   $('#st').onclick=()=>settingsForm();
+  $('#icb').onclick=exportIcs;
+  document.querySelectorAll('.more').forEach(b=>b.onclick=()=>{const dd=new Date(b.dataset.wk+'T00:00');wkStart=new Date(dd.getFullYear(),dd.getMonth(),dd.getDate()-((dd.getDay()+6)%7));vw='week';adminView();});
   $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#yrb').onclick=()=>{vw='year';yr=month.getFullYear();adminView();};
   $('#allb').onclick=()=>{vw='all';adminView();};
@@ -509,6 +538,17 @@ function pwForm(){const d=$('#dlg');
     const r=await sb.auth.updateUser({password:f.a});
     if(r.error) return $('#we').textContent='Could not change it: '+r.error.message;
     d.close();alert('Password changed.');};}
+function exportIcs(){
+  const ps=posts.filter(p=>p.post_date);if(!ps.length)return alert('No posts to export.');
+  const e=t=>String(t||'').replace(/\\/g,'\\\\').replace(/[,;]/g,'\\$&').replace(/\r?\n/g,'\\n'),d8=t=>t.replace(/-/g,''),st=new Date().toISOString().replace(/[-:]|\.\d+/g,'');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Content Calendar//EN'];
+  ps.forEach(p=>{L.push('BEGIN:VEVENT','UID:'+p.id+'@content-calendar','DTSTAMP:'+st,
+    p.post_time?'DTSTART;TZID='+TZ+':'+d8(p.post_date)+'T'+p.post_time.slice(0,5).replace(':','')+'00':'DTSTART;VALUE=DATE:'+d8(p.post_date),
+    'SUMMARY:'+e(p.platform+' ('+(p.pillar||'no pillar')+')'),'DESCRIPTION:'+e(p.caption),'END:VEVENT');});
+  L.push('END:VCALENDAR');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar;charset=utf-8'}));
+  a.download=((clients.find(c=>c.id===cid)||{}).name||'client').replace(/[^\w-]+/g,'_')+'_posts.ics';
+  document.body.appendChild(a);a.click();a.remove();}
 function exportCsv(){
   if(!posts.length) return alert('No posts to export.');
   const cols=['post_date','post_time','platform','pillar','format','status','approval','campaign','caption','visual','hashtags','notes','reach','likes','comments_count','shares_saves','dms_inquiries','link_clicks','engagements'];
@@ -560,16 +600,17 @@ async function postForm(p={}){
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
   <div id="cmx"></div>
   <p class="err" id="pe"></p>
-  <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
+  <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button><button type="button" id="dup">Duplicate</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
-  const updV=()=>{$('#vl').innerHTML=vis($('#pf').visual.value).startsWith('<a')?vis($('#pf').visual.value):'';};
+  const updV=()=>{const v=$('#pf').visual.value;$('#vl').innerHTML=/^https?:\/\//i.test(v.trim())?vis(v):'';};
   $('#pf').visual.oninput=updV;updV();
   const updMn=()=>{const f=$('#pf');$('#mn').textContent=f.post_time.value&&f.post_date.value?'Manila: '+toManila(f.post_date.value,f.post_time.value,TZ):'';};
   $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=()=>{updRp();updMn();};$('#pf').post_time.onchange=updMn;updRp();updMn();
   if($('#hs')) $('#hs').onchange=e=>{const h=hsets.find(x=>x.id===e.target.value);if(h){const i=$('#pf').hashtags;i.value=(i.value.trim()?i.value.trim()+' ':'')+h.tags;}e.target.value='';};
   if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
+  if(p.id) $('#dup').onclick=()=>{d.close();postForm({...p,id:undefined,status:'Draft',approval:'Pending',approved_by:null,approved_on:null,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) showComments(p.id,'#cmx');
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const f=Object.fromEntries(new FormData(e.target));
@@ -630,9 +671,13 @@ function listView(m){
   const kk=p=>p.approval==='Changes requested'?'Changes':p.approval;
   const lab={Pending:'Waiting for your approval',Approved:'Approved',Changes:'Changes requested'};
   const shown=posts.filter(p=>flt==='All'||p.approval===flt);
-  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
-  ${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff;font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
+  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="aa" class="ok">Approve all waiting</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
+  ${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])};font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
   $('#one').onclick=()=>{lv=false;clientView();};
+  $('#aa').onclick=async()=>{const pend=posts.filter(x=>x.approval==='Pending');if(!pend.length)return alert('Nothing is waiting for approval.');
+    if(!confirm('Approve all '+pend.length+' waiting posts?'))return;
+    for(const x of pend){const r=await sb.rpc('set_approval',{p_post:x.id,p_approval:'Approved'});if(r.error){await loadPosts();clientView();return alert('Could not save: '+r.error.message);}}
+    await loadPosts();clientView();toast('Approved '+pend.length+' posts.');};
   $('#ft').onchange=e=>{flt=e.target.value;clientView();};
   document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});
 }
@@ -650,16 +695,24 @@ function clientView(){
   <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
   <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
   ${p.visual?`<p><b>Visual:</b> ${vis(p.visual)}</p>`:''}
-  <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
+  <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
   <div class="row"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
   <div id="cmx" style="margin-top:14px"></div></div>`;
   $('#lv').onclick=()=>{lv=true;clientView();};
   $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
-  const act=async v=>{const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
+  const act=async v=>{const prev=p.approval;const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
     if(r.error) return alert('Could not save: '+r.error.message);
-    await loadPosts();clientView();};
-  $('#ap').onclick=()=>act('Approved');$('#rc').onclick=()=>act('Changes requested');
+    await loadPosts();clientView();
+    toast(v==='Approved'?'Post approved.':'Changes requested.',async()=>{const u=await sb.rpc('set_approval',{p_post:p.id,p_approval:prev});if(u.error)alert('Could not undo: '+u.error.message);await loadPosts();clientView();});};
+  $('#ap').onclick=()=>act('Approved');
+  $('#rc').onclick=async()=>{const c=prompt('What would you like changed? (Optional. This note goes to your social media manager.)');if(c===null)return;
+    if(c.trim()){const w=await sb.from('comments').insert({post_id:p.id,author_id:user.id,body:c.trim()});if(w.error)alert('Could not add your note: '+w.error.message);}
+    act('Changes requested');};
   showComments(p.id,'#cmx');
+}
+async function boot(){
+  try{await boot0();}
+  catch(e){$('#app').innerHTML='<div class="login"><h1 style="margin-top:0">Can\u2019t connect</h1><p>Check your internet connection and try again.</p><button class="p" id="rt" style="width:100%">Try again</button></div>';$('#rt').onclick=boot;}
 }
 boot();
 </script>
