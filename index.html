@@ -68,7 +68,7 @@ const APPR=['Pending','Approved','Changes requested'];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-let me=null,user=null,clients=[],cid=null,posts=[],keyDates=[],month=new Date(),idx=0;
+let me=null,user=null,clients=[],cid=null,posts=[],keyDates=[],month=new Date(),idx=0,lv=false,flt='All';
 month.setDate(1);
 
 async function boot(){
@@ -222,15 +222,26 @@ async function showComments(pid,sel){
 }
 
 /* ---------- Client ---------- */
+function listView(m){
+  const kk=p=>p.approval==='Changes requested'?'Changes':p.approval;
+  const lab={Pending:'Waiting for your approval',Approved:'Approved',Changes:'Changes requested'};
+  const shown=posts.filter(p=>flt==='All'||p.approval===flt);
+  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
+  ${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff;font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
+  $('#one').onclick=()=>{lv=false;clientView();};
+  $('#ft').onchange=e=>{flt=e.target.value;clientView();};
+  document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});
+}
 function clientView(){
   $('#app').innerHTML=head(`<span style="color:var(--mute)">${posts.filter(p=>p.approval==='Pending').length} waiting for your approval</span>`)+`<main id="cm"></main>`;
   bindOut();
   const m=$('#cm');
   if(!posts.length){m.innerHTML='<div class="card">No posts have been added to your calendar yet. Check back soon.</div>';return;}
+  if(lv) return listView(m);
   idx=Math.min(idx,posts.length-1);
   const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
-  m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
+  m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><button id="lv">View all posts</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
   <div class="card"><div class="row"><span class="badge b-${k}">${k==='Pending'?'Waiting for your approval':k==='Approved'?'Approved':'Changes requested'}</span>
   <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
   <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
@@ -238,6 +249,7 @@ function clientView(){
   <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
   <div class="row"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
   <div id="cmx" style="margin-top:14px"></div></div>`;
+  $('#lv').onclick=()=>{lv=true;clientView();};
   $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
   const act=async v=>{const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
     if(r.error) return alert('Could not save: '+r.error.message);
