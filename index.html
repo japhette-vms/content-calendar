@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#f6f5fa;--card:#fff;--ink:#1d2030;--mute:#6b6f85;--line:#e1e0ec;--acc:#4b3fd6;--accink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#14151f;--card:#1d1f2e;--ink:#eceefa;--mute:#9a9eb8;--line:#2d3047;--acc:#8d83ff;--accink:#14151f}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 "DM Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{font-size:18px;margin:0;flex:1}
+main{max-width:1100px;margin:0 auto;padding:20px}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:500}
+button.ok{background:#1f8a5b;color:#fff;border-color:#1f8a5b}
+button.bad{background:#c2410c;color:#fff;border-color:#c2410c}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
+.login{max-width:340px;margin:12vh auto;background:var(--card);padding:28px;border-radius:12px;border:1px solid var(--line)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+.stat b{display:block;font-size:20px}
+.warn{background:#fff3d6;color:#6a4a00;border-radius:8px;padding:8px 12px;margin:8px 0}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.dow{background:var(--bg);padding:6px;font-size:12px;color:var(--mute);text-align:center}
+.day{background:var(--card);min-height:96px;padding:4px;font-size:12px}
+.day.off{opacity:.45}
+.day>span{color:var(--mute)}
+.chip{display:block;width:100%;text-align:left;margin-top:3px;padding:2px 5px;border:0;border-radius:5px;color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:10px 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px}
+.pace{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+.badge{display:inline-block;border-radius:20px;padding:2px 12px;font-size:13px;font-weight:500}
+.b-Pending{background:#fff3d6;color:#6a4a00}.b-Approved{background:#d8f3e6;color:#145a3b}.b-Changes{background:#ffe0d2;color:#8a2f08}
+.cap{white-space:pre-wrap;font-size:16px;margin:14px 0}
+.cm{border-top:1px solid var(--line);padding:6px 0;font-size:14px}.cm small{color:var(--mute)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);width:min(560px,94vw);padding:20px}
+dialog::backdrop{background:#0008}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.err{color:#c2410c;font-size:14px;min-height:20px}
+@media(max-width:640px){.day{min-height:60px}.chip{font-size:10px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<dialog id="dlg"></dialog>
+<script>
+const SB_URL='https://ognxncsuxhaewpvxrcwi.supabase.co';
+const SB_KEY='sb_publishable_hxHsGW9la9lXCsK9pnwe6A_ANQjFJ3u';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const PILLARS={'Educational':'#7c5cd6','Promo':'#e0634f','Behind the Scenes':'#1f9a8a','Testimonials':'#d6478f','Community':'#3b7fd6','Trending':'#c98a0b','Spotlight':'#3a9a4f'};
+const PLATFORMS=['Google Business Profile','Facebook','Instagram','TikTok','LinkedIn'];
+const GOALS={'Google Business Profile':1,'Facebook':3,'Instagram':4,'TikTok':2,'LinkedIn':2};
+const FORMATS=['Reel','Carousel','Story','Static Photo','Video','Text Only','Live'];
+const STATUS=['Draft','Approved','Scheduled','Posted'];
+const MARK={Draft:'○',Approved:'□',Scheduled:'■',Posted:'●'};
+const APPR=['Pending','Approved','Changes requested'];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+let me=null,user=null,clients=[],cid=null,posts=[],month=new Date(),idx=0;
+month.setDate(1);
+
+async function boot(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) return loginView();
+  user=session.user;
+  const {data,error}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  if(error||!data){await sb.auth.signOut();return loginView('This login is not linked to a calendar yet. Ask your social media manager.');}
+  me=data;
+  if(me.role==='admin'){
+    const r=await sb.from('clients').select('*').order('name');
+    clients=r.data||[];cid=clients[0]?.id||null;
+  } else cid=me.client_id;
+  await loadPosts();
+  me.role==='admin'?adminView():clientView();
+}
+function loginView(msg=''){
+  $('#app').innerHTML=`<form class="login" id="lf"><h1 style="margin-top:0">Content Calendar</h1>
+  <label for="em">Email</label><input id="em" type="email" required autocomplete="username">
+  <label for="pw">Password</label><input id="pw" type="password" required autocomplete="current-password">
+  <p class="err" id="le">${esc(msg)}</p><button class="p" style="width:100%">Log in</button></form>`;
+  $('#lf').onsubmit=async e=>{e.preventDefault();
+    const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
+    if(error) $('#le').textContent='Email or password is incorrect.'; else boot();};
+}
+async function loadPosts(){
+  if(!cid){posts=[];return;}
+  const {data,error}=await sb.from('posts').select('*').eq('client_id',cid).order('post_date').order('post_time');
+  if(error) alert('Could not load posts: '+error.message);
+  posts=data||[];
+}
+const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}<button id="out">Log out</button></header>`;
+function bindOut(){$('#out').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};}
+
+/* ---------- Admin ---------- */
+function adminView(){
+  const y=month.getFullYear(),m=month.getMonth();
+  const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
+  const cnt=s=>mp.filter(p=>p.status===s).length;
+  const need=mp.filter(p=>flag(p)).length;
+  // mix warning
+  const byP={};mp.forEach(p=>byP[p.pillar]=(byP[p.pillar]||0)+1);
+  const over=Object.entries(byP).filter(([k,v])=>mp.length&&v/mp.length>.4&&k!=='undefined'&&k!=='null');
+  // weekly pace (current week, Mon–Sun)
+  const now=new Date(),mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const wk=posts.filter(p=>p.post_date>=iso(mon)&&p.post_date<=iso(sun));
+  const first=new Date(y,m,1),start=new Date(y,m,1-first.getDay());
+  let cells='';
+  for(let i=0;i<42;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    if(i>=35&&d.getMonth()!==m)break;
+    const ds=iso(d);
+    const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
+    cells+=`<div class="day${d.getMonth()!==m?' off':''}"><span>${d.getDate()}</span>${chips}</div>`;
+  }
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button class="p" id="np">New post</button>`)+
+  `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
+  <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
+  ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
+  ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
+  <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
+  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
+  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]}</b>${pl}</div>`}).join('')}</div></main>`;
+  bindOut();
+  $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
+  $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
+  $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
+  $('#np').onclick=()=>postForm();
+  document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+}
+const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
+const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
+
+async function postForm(p={}){
+  if(!cid) return alert('Add a client first.');
+  const d=$('#dlg');
+  d.innerHTML=`<form id="pf"><h2 style="margin-top:0">${p.id?'Edit post':'New post'}</h2>
+  <div class="g2"><div><label>Date</label><input name="post_date" type="date" required value="${p.post_date||''}"></div>
+  <div><label>Time (client's local time)</label><input name="post_time" type="time" value="${(p.post_time||'').slice(0,5)}"></div>
+  <div><label>Platform</label><select name="platform">${opts(PLATFORMS,p.platform)}</select></div>
+  <div><label>Content pillar</label><select name="pillar">${opts(Object.keys(PILLARS),p.pillar)}</select></div>
+  <div><label>Format</label><select name="format">${opts(FORMATS,p.format)}</select></div>
+  <div><label>Status</label><select name="status">${opts(STATUS,p.status||'Draft')}</select></div>
+  <div><label>Client approval</label><select name="approval">${opts(APPR,p.approval||'Pending')}</select></div>
+  <div><label>Campaign / promo</label><input name="campaign" value="${esc(p.campaign)}"></div></div>
+  <label>Post copy / caption</label><textarea name="caption" rows="4">${esc(p.caption)}</textarea>
+  <label>Visual / photo</label><input name="visual" value="${esc(p.visual)}">
+  <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">
+  <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
+  <div id="cmx"></div>
+  <p class="err" id="pe"></p>
+  <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
+  d.showModal();
+  $('#cx').onclick=()=>d.close();
+  if(p.id) showComments(p.id,'#cmx');
+  $('#pf').onsubmit=async e=>{e.preventDefault();
+    const f=Object.fromEntries(new FormData(e.target));
+    f.post_time=f.post_time||null;f.client_id=cid;
+    if(f.approval!==p.approval&&f.approval==='Pending'){f.approved_by=null;f.approved_on=null;}
+    const r=p.id?await sb.from('posts').update(f).eq('id',p.id):await sb.from('posts').insert(f);
+    if(r.error) return $('#pe').textContent='Could not save: '+r.error.message;
+    d.close();await loadPosts();adminView();};
+  if(p.id) $('#del').onclick=async()=>{if(!confirm('Delete this post?'))return;await sb.from('posts').delete().eq('id',p.id);d.close();await loadPosts();adminView();};
+}
+async function showComments(pid,sel){
+  const {data}=await sb.from('comments').select('*').eq('post_id',pid).order('created_at');
+  $(sel).innerHTML=`<h3 style="margin-bottom:4px">Comments</h3>${(data||[]).map(c=>`<div class="cm">${esc(c.body)}<br><small>${new Date(c.created_at).toLocaleString()}${c.author_id===user.id?' · you':''}</small></div>`).join('')||'<div class="cm"><small>No comments yet.</small></div>'}
+  <div class="row" style="margin-top:8px"><input id="cin" placeholder="Write a comment" style="flex:1"><button type="button" id="cad">Add comment</button></div>`;
+  $('#cad').onclick=async()=>{const b=$('#cin').value.trim();if(!b)return;
+    const r=await sb.from('comments').insert({post_id:pid,author_id:user.id,body:b});
+    if(r.error) return alert('Could not add comment: '+r.error.message);
+    showComments(pid,sel);};
+}
+
+/* ---------- Client ---------- */
+function clientView(){
+  $('#app').innerHTML=head(`<span style="color:var(--mute)">${posts.filter(p=>p.approval==='Pending').length} waiting for your approval</span>`)+`<main id="cm"></main>`;
+  bindOut();
+  const m=$('#cm');
+  if(!posts.length){m.innerHTML='<div class="card">No posts have been added to your calendar yet. Check back soon.</div>';return;}
+  idx=Math.min(idx,posts.length-1);
+  const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
+  const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
+  m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
+  <div class="card"><div class="row"><span class="badge b-${k}">${k==='Pending'?'Waiting for your approval':k==='Approved'?'Approved':'Changes requested'}</span>
+  <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
+  <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
+  ${p.visual?`<p><b>Visual:</b> ${esc(p.visual)}</p>`:''}
+  <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
+  <div class="row"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
+  <div id="cmx" style="margin-top:14px"></div></div>`;
+  $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
+  const act=async v=>{const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
+    if(r.error) return alert('Could not save: '+r.error.message);
+    await loadPosts();clientView();};
+  $('#ap').onclick=()=>act('Approved');$('#rc').onclick=()=>act('Changes requested');
+  showComments(p.id,'#cmx');
+}
+boot();
+</script>
+</body>
+</html>
