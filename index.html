@@ -129,13 +129,14 @@ function bindOut(){
 }
 
 /* ---------- Admin ---------- */
-let vw='month',wkStart=null,hsets=[];
+let vw='month',wkStart=null,hsets=[],yr=new Date().getFullYear();
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
 const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
 function adminView(){
   if(vw==='week') return weekView();
   if(vw==='report') return reportView();
+  if(vw==='year') return yearView();
   const y=month.getFullYear(),m=month.getMonth();
   const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
   const cnt=s=>mp.filter(p=>p.status===s).length;
@@ -161,7 +162,7 @@ function adminView(){
     const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
     cells+=`<div class="day${d.getMonth()!==m?' off':''}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="rpb">Report</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
@@ -177,6 +178,7 @@ function adminView(){
   $('#np').onclick=()=>postForm();
   $('#st').onclick=()=>settingsForm();
   $('#rpb').onclick=()=>{vw='report';adminView();};
+  $('#yrb').onclick=()=>{vw='year';yr=month.getFullYear();adminView();};
   $('#vwb').onclick=()=>{vw='week';const n=new Date();wkStart=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));adminView();};
   document.querySelectorAll('.rr').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
   document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
@@ -197,7 +199,7 @@ function weekView(){
     <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
   }).join('');
   const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="rpb">Report</button><button id="pr">Print</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="pr">Print</button><button class="p" id="np">New post</button>`)+
   `<main><div class="pt"><h2 style="margin:0">${esc(cname)} – content plan</h2></div>
   <div class="row noprint"><button id="pw" aria-label="Previous week">‹</button><h2 style="margin:0;flex:1;text-align:center">${range}</h2><button id="nw" aria-label="Next week">›</button></div>
   <h2 class="pt" style="text-align:center">${range}</h2>
@@ -208,6 +210,7 @@ function weekView(){
   $('#vwb').onclick=()=>{vw='month';adminView();};
   $('#pr').onclick=()=>window.print();
   $('#rpb').onclick=()=>{vw='report';adminView();};
+  $('#yrb').onclick=()=>{vw='year';yr=month.getFullYear();adminView();};
   $('#np').onclick=()=>postForm();
   $('#pw').onclick=()=>{wkStart.setDate(wkStart.getDate()-7);adminView();};
   $('#nw').onclick=()=>{wkStart.setDate(wkStart.getDate()+7);adminView();};
@@ -348,6 +351,7 @@ function helpForm(admin){
   <li><b>Client approval</b> starts as Pending. The client approves or asks for changes in their own login; you will see ✓ or (!) on the calendar.</li>
   <li><b>Week view</b> shows one week in detail. <b>Print</b> makes a clean page.</li>
   <li><b>Results</b>: after a post is live, open it and type the numbers under Results.</li>
+  <li><b>Year</b> shows all 12 months at a glance. Click a month to open it.</li>
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
@@ -417,6 +421,37 @@ async function ideasForm(){
     const w=await sb.from('ideas').insert({client_id:cid,title:f.t.trim(),notes:f.n.trim()||null,pillar:f.p||null,platform:f.pl||null,status:'Idea'});
     if(w.error) return $('#ie').textContent='Could not save: '+w.error.message;
     ideaFlt='Idea';ideasForm();};
+}
+
+function yearView(){
+  const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  const yp=posts.filter(p=>p.post_date&&p.post_date.slice(0,4)===String(yr));
+  const MN=[...Array(12)].map((_,m)=>new Date(yr,m,1).toLocaleString('en',{month:'long'}));
+  const cards=MN.map((n,m)=>{
+    const mp=yp.filter(p=>inMonth(p,yr,m));
+    const seg=Object.keys(PILLARS).map(k=>[k,mp.filter(p=>p.pillar===k).length]).filter(x=>x[1]>0);
+    return `<button class="card ym" data-m="${m}" style="text-align:left;padding:14px;font:inherit">
+    <div class="row"><b style="flex:1">${n}</b><span style="font-size:22px;font-weight:700">${mp.length}</span></div>
+    <div style="color:var(--mute);font-size:12px;margin:2px 0 6px">${mp.length?`${mp.filter(p=>p.status==='Posted').length} posted · ${mp.filter(p=>p.approval==='Approved').length} approved · ${mp.filter(p=>p.approval==='Pending').length} pending`:'No posts planned'}</div>
+    <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--line)">${seg.map(([k,c])=>`<div title="${esc(k)}: ${c}" style="width:${c/mp.length*100}%;background:${PILLARS[k]}"></div>`).join('')}</div>
+    <div style="color:var(--mute);font-size:12px;margin-top:6px">${PLATFORMS.map(pl=>[pl,mp.filter(p=>p.platform===pl).length]).filter(x=>x[1]>0).map(([pl,c])=>esc(pl.split(' ')[0])+' '+c).join(' · ')}</div></button>`;
+  }).join('');
+  const kds=keyDates.filter(k=>k.key_date.slice(0,4)===String(yr));
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Month view</button><button id="pr">Print</button>`)+
+  `<main><div class="pt"><h2 style="margin:0">${esc(cname)}: ${yr} overview</h2></div>
+  <div class="row noprint"><button id="py" aria-label="Previous year">‹</button><h2 style="margin:0;flex:1;text-align:center">${yr}</h2><button id="ny" aria-label="Next year">›</button></div>
+  <div class="stats"><div class="stat"><b>${yp.length}</b>Posts planned</div><div class="stat"><b>${yp.filter(p=>p.status==='Posted').length}</b>Posted</div><div class="stat"><b>${yp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div>${PLATFORMS.map(pl=>`<div class="stat"><b>${yp.filter(p=>p.platform===pl).length}</b>${pl}</div>`).join('')}</div>
+  <div class="pace" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${cards}</div>
+  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${esc(k)}</span>`).join('')}</div>
+  ${kds.length?`<h3>Key dates</h3>${kds.map(k=>`<div class="cm">★ ${esc(k.key_date)}: ${esc(k.label)}</div>`).join('')}`:''}
+  <p class="noprint" style="color:var(--mute);font-size:13px">Click a month to open it. The coloured bar shows the mix of content pillars.</p></main>`;
+  bindOut();
+  $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
+  $('#vwb').onclick=()=>{vw='month';adminView();};
+  $('#pr').onclick=()=>window.print();
+  $('#py').onclick=()=>{yr--;adminView();};
+  $('#ny').onclick=()=>{yr++;adminView();};
+  document.querySelectorAll('.ym').forEach(b=>b.onclick=()=>{month=new Date(yr,+b.dataset.m,1);vw='month';adminView();});
 }
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
