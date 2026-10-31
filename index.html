@@ -45,6 +45,7 @@ label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
 .cm{border-top:1px solid var(--line);padding:6px 0;font-size:14px}.cm small{color:var(--mute)}
 dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);width:min(560px,94vw);padding:20px}
 dialog::backdrop{background:#0008}
+a.lnk{display:inline-block;background:var(--acc);color:var(--accink);padding:6px 14px;border-radius:8px;text-decoration:none;font-weight:500}
 dialog{max-height:90vh;overflow:auto}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 .err{color:#c2410c;font-size:14px;min-height:20px}
@@ -130,6 +131,7 @@ function bindOut(){
 
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null,hsets=[],yr=new Date().getFullYear();
+const vis=v=>/^https?:\/\//i.test(String(v||'').trim())?`<a class="lnk" href="${esc(String(v).trim())}" target="_blank" rel="noopener noreferrer">Open the photo or video ↗</a>`:esc(v);
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
 const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
@@ -352,6 +354,7 @@ function helpForm(admin){
   <h3>Everyday use</h3><ul><li><b>New post</b>: fill in the form and Save. Click a post on the calendar to edit it, or to read the client's comments.</li>
   <li><b>Client approval</b> starts as Pending. The client approves or asks for changes in their own login; you will see ✓ or (!) on the calendar.</li>
   <li><b>Week view</b> shows one week in detail. <b>Print</b> makes a clean page.</li>
+  <li><b>Visual / photo</b>: upload the photo or video to Google Drive, set sharing to "Anyone with the link", and paste the link. The client sees an <b>Open the photo or video</b> button.</li>
   <li><b>Results</b>: after a post is live, open it and type the numbers under Results.</li>
   <li><b>Year</b> shows all 12 months at a glance. Click a month to open it.</li>
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
@@ -361,6 +364,7 @@ function helpForm(admin){
   <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
   :`<h2 style="margin-top:0">How to use this calendar</h2>
   <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
+  <li>If a post has a photo or video, click <b>Open the photo or video</b> to see it before you decide.</li>
   <li>Click <b>Approve</b> if the post is good to go, or <b>Request changes</b> and add a comment saying what to change.</li>
   <li>Use <b>View all posts</b> to see a list. The filter at the top can show only posts waiting for your approval.</li>
   <li>You can add a comment on any post. Your social media manager will see it.</li></ul>
@@ -471,7 +475,8 @@ async function postForm(p={}){
   <div><label>Client approval</label><select name="approval">${opts(APPR,p.approval||'Pending')}</select></div>
   <div><label>Campaign / promo</label><input name="campaign" value="${esc(p.campaign)}"></div></div>
   <label>Post copy / caption</label><textarea name="caption" rows="4">${esc(p.caption)}</textarea>
-  <label>Visual / photo</label><input name="visual" value="${esc(p.visual)}">
+  <label>Visual / photo (paste a Google Drive link)</label><input name="visual" value="${esc(p.visual)}" placeholder="https://drive.google.com/...">
+  <div id="vl" style="margin-top:6px"></div>
   <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">${hsets.length?`<select id="hs" style="margin-top:6px"><option value="">Add a saved hashtag set...</option>${hsets.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('')}</select>`:''}
   <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="repost" style="width:auto" ${p.repost?'checked':''}> Evergreen: can be reposted</label><div id="rpd" style="font-size:13px;color:var(--mute)"></div>
   <h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
@@ -483,6 +488,8 @@ async function postForm(p={}){
   d.showModal();
   $('#cx').onclick=()=>d.close();
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
+  const updV=()=>{$('#vl').innerHTML=vis($('#pf').visual.value).startsWith('<a')?vis($('#pf').visual.value):'';};
+  $('#pf').visual.oninput=updV;updV();
   $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=updRp;updRp();
   if($('#hs')) $('#hs').onchange=e=>{const h=hsets.find(x=>x.id===e.target.value);if(h){const i=$('#pf').hashtags;i.value=(i.value.trim()?i.value.trim()+' ':'')+h.tags;}e.target.value='';};
   if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
@@ -561,7 +568,7 @@ function clientView(){
   <div class="card"><div class="row"><span class="badge b-${k}">${k==='Pending'?'Waiting for your approval':k==='Approved'?'Approved':'Changes requested'}</span>
   <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
   <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
-  ${p.visual?`<p><b>Visual:</b> ${esc(p.visual)}</p>`:''}
+  ${p.visual?`<p><b>Visual:</b> ${vis(p.visual)}</p>`:''}
   <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:#fff">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
   <div class="row"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
   <div id="cmx" style="margin-top:14px"></div></div>`;
