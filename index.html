@@ -102,6 +102,19 @@ header{border-bottom:3px solid var(--brand,var(--line))}
 .tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}table.lt{border-collapse:collapse;width:100%;font-size:13px}table.lt th{position:sticky;top:0;background:var(--bg);text-align:left;padding:8px;cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--line)}table.lt td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}table.lt tr.r{cursor:pointer}table.lt tr.r:hover{background:var(--bg)}
 .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;max-width:480px;margin:12px auto}.fg button{padding:0;border:0;border-radius:0;aspect-ratio:1;background:var(--line);position:relative;overflow:hidden;font-size:11px;color:var(--mute)}.fg img{width:100%;height:100%;object-fit:cover;display:block}.fg span{position:absolute;left:3px;bottom:3px;background:#000a;color:#fff;border-radius:6px;padding:0 5px;font-size:10px}.fg .t{padding:6px;text-align:left;white-space:normal;overflow:hidden;position:absolute;inset:0}
 .rch{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:20px;padding:6px 12px;margin:0 6px 6px 0;color:var(--ink);font-size:14px}.nb{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:2px solid var(--brand,var(--acc));border-radius:12px;padding:12px 14px;margin:0 0 12px}.nb b{font-size:16px}.nb .go{margin-left:auto}
+.b-Pending{background:#ffe2c2;color:#7a3a00}.b-Changes{background:#fddede;color:#8f1d1d}
+@media (prefers-color-scheme:dark){.b-Pending{background:#5a3512;color:#ffd9b0}.b-Changes{background:#5c1d1d;color:#ffcaca}.b-Approved{background:#17452f;color:#b7f0d1}}
+.sub{display:block;font-weight:400;color:var(--mute);font-size:12px}
+.big{font-size:17px;min-height:54px;font-weight:600}.stickybar .big{flex:1}
+.nb.done{border-color:#177a4e;gap:14px}
+.pimg{cursor:zoom-in}#lbx{position:fixed;inset:0;background:#000d;display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out}#lbx img{max-width:96vw;max-height:94vh;object-fit:contain}
+#flash{position:fixed;left:50%;top:40%;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;background:#177a4e;color:#fff;font-size:72px;line-height:120px;text-align:center;display:none;pointer-events:none;z-index:9998}
+#flash.go{display:block;animation:fl .9s ease-out forwards}@keyframes fl{0%{opacity:0;transform:scale(.5)}30%{opacity:1;transform:scale(1.05)}100%{opacity:0;transform:scale(1)}}
+.sk{background:linear-gradient(90deg,var(--line),var(--bg),var(--line));background-size:200% 100%;animation:sh 1.2s infinite;border-radius:10px;margin:12px auto;max-width:520px}@keyframes sh{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.sk{animation:none}#flash.go{animation:none;opacity:.9}.prog>div{transition:none}}
+.dots{display:none}.dt{width:9px;height:9px;border-radius:50%}.dt-Pending{background:#e8780f}.dt-Approved{background:#177a4e}.dt-Changes{background:#d32f2f}.cgrid .day.sel{box-shadow:inset 0 0 0 2px var(--acc)}#dayl{display:none}
+body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}body.client .sb{font-size:12px;padding:1px 9px}body.client button,body.client select{min-height:44px}body.client .chip,body.client .lg,body.client .more{min-height:0}
+@media(max-width:640px){.pc{max-width:none;margin:10px 0;border-radius:10px}.pimg{max-height:70vh}.card{padding:14px}.cgrid .cc{display:none}.cgrid .dots{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin-top:4px}.cgrid .day{cursor:pointer}#dayl{display:block}}
 </style>
 </head>
 <body>
@@ -191,7 +204,7 @@ async function loadPosts(){
   newCm=[];
   if(adm){const ids=new Set(posts.map(x=>x.id));newCm=((cr&&cr.data)||[]).filter(c=>ids.has(c.post_id));}
 }
-const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:42px;max-width:140px;object-fit:contain;margin-right:10px">`:''}${esc(CNAME)} Content Calendar`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
+const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:42px;max-width:140px;object-fit:contain;margin-right:10px">`:''}<span>${esc(CNAME)||'Content Calendar'}<small class="sub">Social media calendar</small></span>`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
   $('#out').onclick=async()=>{await sb.auth.signOut();me=null;applyBrand();loginView();};
   if(me&&me.role==='admin'){const ids=['allb','rpb','yrb','icb','st','pr'].map(i=>document.getElementById(i)).filter(Boolean);
@@ -221,9 +234,14 @@ const picon=pl=>`<span class="pi" style="background:${PCOL[pl]||'#888'}" aria-hi
 let fPil=null,fPlat=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat);
 const progress=(ps,who)=>{const n=ps.length,a=ps.filter(p=>p.approval==='Approved').length;if(!n)return '';return `<div class="progw${a===n?' done':''}"><div style="margin-bottom:4px">${a===n?'All '+n+' posts approved 🎉':a+' of '+n+' posts approved'+(who?' by '+who:'')}</div><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${a}"><div style="width:${a/n*100}%"></div></div></div>`;};
 const rel=ds=>{if(!ds)return '';const n=Math.round((new Date(ds+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);return n<0?(-n===1?'was due yesterday':'was due '+(-n)+' days ago'):n===0?'today':n===1?'tomorrow':'in '+n+' days';};
-function needsBanner(){const pend=posts.filter(p=>p.approval==='Pending'&&p.post_date);if(!pend.length)return '';
-  const nx=pend.slice().sort((a,b)=>a.post_date.localeCompare(b.post_date))[0],n=posts.filter(p=>p.approval==='Pending').length;
-  return `<div class="nb" role="status"><div><b>${n} post${n===1?'':'s'} need${n===1?'s':''} your approval</b><div style="color:var(--mute);font-size:14px">The next one goes live ${rel(nx.post_date)}.</div></div><button class="p go" id="gonx" data-i="${posts.indexOf(nx)}">Review the next one</button></div>`;}
+function needsBanner(){if(!posts.length)return '';const all=posts.filter(p=>p.approval==='Pending'),n=all.length;
+  if(!n){const ch=posts.filter(p=>p.approval==='Changes requested').length;return `<div class="nb done" role="status"><div style="font-size:40px;line-height:1">🎉</div><div><b>You're all caught up!</b><div style="color:var(--mute);font-size:14px">Nothing is waiting for your approval.${ch?' '+ch+(ch===1?' post is':' posts are')+' with your social media manager for changes.':''}</div></div></div>`;}
+  const dated=all.filter(p=>p.post_date),nx=dated.length?dated.slice().sort((a,b)=>a.post_date.localeCompare(b.post_date))[0]:all[0];
+  return `<div class="nb" role="status"><div><b>${n} post${n===1?'':'s'} need${n===1?'s':''} your approval</b>${nx.post_date?`<div style="color:var(--mute);font-size:14px">The next one goes live ${rel(nx.post_date)}.</div>`:''}</div><button class="p go" id="gonx" data-i="${posts.indexOf(nx)}">Review the next one</button></div>`;}
+const akey=()=>'<div class="legend"><span class="sb b-Pending">To approve</span><span class="sb b-Approved">Approved</span><span class="sb b-Changes">You asked for changes</span></div>';
+function flash(v){if(v!=='Approved')return;let f=document.getElementById('flash');if(!f){f=document.createElement('div');f.id='flash';f.setAttribute('aria-hidden','true');f.textContent='✓';document.body.appendChild(f);}f.className='';void f.offsetWidth;f.className='go';setTimeout(()=>{f.className='';},1000);}
+let selDay=null;
+document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('img.pimg');if(!im||$('#dlg').open)return;const o=document.createElement('div');o.id='lbx';o.innerHTML='<img alt="Post visual enlarged">';o.firstChild.src=im.src.replace('sz=w1000','sz=w2000');const x=()=>{o.remove();document.removeEventListener('keydown',k);};const k=ev=>{if(ev.key==='Escape')x();};o.onclick=x;document.addEventListener('keydown',k);document.body.appendChild(o);});
 const chipHtml=p=>{const pc=safeCol(PILLARS[p.pillar]),th=thumbUrl(p.visual,'w120');
   return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
 function postCard(p){
@@ -246,12 +264,17 @@ function calView(m){
   const y=month.getFullYear(),mo=month.getMonth(),first=new Date(y,mo,1),start=new Date(y,mo,1-((first.getDay()+6)%7)),todayS=iso(new Date());
   let cells='';
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);if(i>=35&&d.getMonth()!==mo)break;const ds=iso(d);
-    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}"><span>${d.getDate()}</span>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1">${picon(p.platform)}<span class="ctx">${esc(p.platform)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
+    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}" data-ds="${ds}"><span>${d.getDate()}</span><div class="dots">${posts.filter(p=>p.post_date===ds).map(p=>`<i class="dt dt-${p.approval==='Changes requested'?'Changes':p.approval}"></i>`).join('')}</div>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1">${picon(p.platform)}<span class="ctx">${esc(p.platform)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="fvb3">Feed</button></div>
   <div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="cgrid" style="margin-top:10px">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
-  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${esc(k)}</span>`).join('')}</div>`;
+  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${esc(k)}</span>`).join('')}</div><div id="dayl"></div>`;
   $('#one').onclick=()=>{lv=false;clientView();};$('#lst').onclick=()=>{lv=true;clientView();};$('#fvb3').onclick=()=>{lv='feed';clientView();};
+  const showDay=ds=>{selDay=ds;const ps=posts.filter(p=>p.post_date===ds);document.querySelectorAll('.cgrid .day').forEach(c=>c.classList.toggle('sel',c.dataset.ds===ds));
+    $('#dayl').innerHTML=`<h3 style="margin:14px 0 6px">${new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'})}</h3>`+(ps.map(p=>`<button class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><b>${esc(p.platform)}</b> ${apBadge(p,1)}<div class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc((p.caption||'').slice(0,90))}</div></div></button>`).join('')||'<p style="color:var(--mute)">Nothing planned this day.</p>');
+    document.querySelectorAll('#dayl .wp').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});};
+  document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>c.onclick=e=>{if(e.target.closest('.cc'))return;showDay(c.dataset.ds);});
+  showDay(selDay||todayS);
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);clientView();};$('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);clientView();};
   document.querySelectorAll('.cc').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});
 }
@@ -656,7 +679,7 @@ const RES='Add results';
 const TZS=[['America/New_York','US Eastern (New York)'],['America/Chicago','US Central (Chicago)'],['America/Denver','US Mountain (Denver, Utah)'],['America/Phoenix','US Mountain, no daylight saving (Phoenix)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Anchorage','Alaska'],['Pacific/Honolulu','Hawaii'],['America/Toronto','Canada Eastern (Toronto)'],['Europe/London','UK (London)'],['Europe/Paris','Central Europe (Paris)'],['Australia/Sydney','Sydney'],['Asia/Singapore','Singapore'],['Asia/Manila','Manila']];
 const seenGet=c=>{try{return localStorage.getItem('seen:'+c)||'1970-01-01T00:00:00Z';}catch(e){return '1970-01-01T00:00:00Z';}};
 const seenSet=c=>{try{localStorage.setItem('seen:'+c,new Date().toISOString());}catch(e){}};
-function applyBrand(){const r=document.documentElement.style;
+function applyBrand(){const r=document.documentElement.style;document.body.classList.toggle('client',!!(me&&me.role!=='admin'));
   if(me&&BRAND)r.setProperty('--brand',BRAND);else r.removeProperty('--brand');
   if(me&&me.role==='client'&&BRAND){r.setProperty('--acc',BRAND);const n=parseInt(BRAND.slice(1),16),L=(0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255;r.setProperty('--accink',L>0.6?'#14151f':'#ffffff');}
   else{r.removeProperty('--acc');r.removeProperty('--accink');}}
@@ -824,7 +847,7 @@ function listView(m){
   const lab={Pending:'Waiting for your approval',Approved:'Approved',Changes:'You asked for changes'};
   const shown=posts.filter(p=>flt==='All'||p.approval===flt);
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="cvb2">Calendar</button><button id="fvb2">Feed</button><button id="aa" class="ok">Approve all waiting</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f==='Changes requested'?'You asked for changes':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
-  ${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])};font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
+  ${shown.length?'':'<div class="card" style="text-align:center">Nothing here for this filter. 🎈</div>'}${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])};font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
   $('#one').onclick=()=>{lv=false;clientView();};$('#cvb2').onclick=()=>{lv='cal';clientView();};$('#fvb2').onclick=()=>{lv='feed';clientView();};
   $('#aa').onclick=async()=>{const pend=posts.filter(x=>x.approval==='Pending');if(!pend.length)return alert('Nothing is waiting for approval.');
     if(!confirm('Approve all '+pend.length+' waiting posts?'))return;
@@ -834,11 +857,12 @@ function listView(m){
   document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});
 }
 function clientView(){
+  document.title=(CNAME||'Content')+' – Content Calendar';
   $('#app').innerHTML=head(`<span style="color:var(--mute)">${posts.filter(p=>p.approval==='Pending').length} waiting for your approval</span>`)+`<main><div id="topb"></div><div id="cm"></div></main>`;
   bindOut();
-  $('#topb').innerHTML=needsBanner()+progress(posts);if($('#gonx'))$('#gonx').onclick=e=>{lv=false;idx=+e.currentTarget.dataset.i;clientView();};
+  $('#topb').innerHTML=needsBanner()+progress(posts)+(lv?akey():'');if($('#gonx'))$('#gonx').onclick=e=>{lv=false;idx=+e.currentTarget.dataset.i;clientView();};
   const m=$('#cm');
-  if(!posts.length){m.innerHTML='<div class="card">No posts have been added to your calendar yet. Check back soon.</div>';return;}
+  if(!posts.length){m.innerHTML='<div class="card" style="text-align:center;padding:32px"><div style="font-size:44px">🗓️</div><h2 style="margin:8px 0">Nothing here yet</h2><p style="color:var(--mute);margin:0">Your social media manager is preparing your first posts. They will show up here as soon as they are ready.</p></div>';return;}
   if(lv) return lv==='cal'?calView(m):lv==='feed'?clientFeed(m):listView(m);
   idx=Math.min(idx,posts.length-1);
   const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
@@ -848,17 +872,20 @@ function clientView(){
   <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
   ${postCard(p)}
   ${p.post_date&&p.status!=='Posted'?`<p style="text-align:center;color:var(--mute);margin:0 0 8px">Goes live ${esc(rel(p.post_date))} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</p>`:''}
-  <div class="row stickybar"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
+  <div class="row stickybar"><button class="p big" id="ap">Approve</button><button class="bad big" id="rc">Request changes</button></div>
   <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
   <div id="cmx" style="margin-top:14px"></div></div>`;
   $('#lv').onclick=()=>{lv=true;clientView();};$('#cvb').onclick=()=>{lv='cal';clientView();};$('#fvb').onclick=()=>{lv='feed';clientView();};
   let x0=null;m.ontouchstart=e=>{x0=e.touches[0].clientX;};
   m.ontouchend=e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)<70)return;if(dx<0&&idx<posts.length-1){idx++;clientView();}else if(dx>0&&idx>0){idx--;clientView();}};
   $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
-  const act=async v=>{const prev=p.approval;const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
+  const act=async v=>{const prev=p.approval,back=idx;const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:v});
     if(r.error) return alert('Could not save: '+r.error.message);
-    await loadPosts();clientView();
-    toast(v==='Approved'?'Post approved.':'Changes requested.',async()=>{const u=await sb.rpc('set_approval',{p_post:p.id,p_approval:prev});if(u.error)alert('Could not undo: '+u.error.message);await loadPosts();clientView();});};
+    await loadPosts();
+    const n=posts.length;for(let o=1;o<=n;o++){const j=(back+o)%n;if(posts[j].approval==='Pending'){idx=j;break;}}
+    clientView();flash(v);
+    const left=posts.filter(x=>x.approval==='Pending').length;
+    toast((v==='Approved'?'Approved':'Changes sent')+(left?' · '+left+' left':" · You're all caught up!"),async()=>{const u=await sb.rpc('set_approval',{p_post:p.id,p_approval:prev});if(u.error)alert('Could not undo: '+u.error.message);idx=back;await loadPosts();clientView();});};
   $('#ap').onclick=()=>act('Approved');
   $('#rc').onclick=()=>{const d=$('#dlg');
     d.innerHTML=`<form id="rf"><h2 style="margin-top:0">What would you like changed?</h2><div role="group" aria-label="What to change">${['Wording','Photo or video','Date or time','Something else'].map(r=>`<label class="rch"><input type="checkbox" name="r" value="${r}" style="width:auto;min-height:0"> ${r}</label>`).join('')}</div><label for="rn">Add a note (optional)</label><textarea id="rn" rows="3" placeholder="For example: please mention our Saturday hours"></textarea><div class="row" style="margin-top:12px"><button class="bad">Send to my social media manager</button><button type="button" id="rx">Cancel</button></div></form>`;
@@ -869,7 +896,7 @@ function clientView(){
   showComments(p.id,'#cmx');
 }
 async function boot(){
-  $('#app').innerHTML='<div class="login" role="status"><p style="margin:0;color:var(--mute)">Loading your calendar…</p></div>';
+  $('#app').innerHTML='<div role="status" aria-label="Loading your calendar" style="padding:20px"><div class="sk" style="height:56px"></div><div class="sk" style="height:18px;width:60%"></div><div class="sk" style="height:320px"></div><div class="sk" style="height:54px"></div></div>';
   try{await boot0();}
   catch(e){$('#app').innerHTML='<div class="login"><h1 style="margin-top:0">Can\u2019t connect</h1><p>Check your internet connection and try again.</p><button class="p" id="rt" style="width:100%">Try again</button></div>';$('#rt').onclick=boot;}
 }
