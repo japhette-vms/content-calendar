@@ -30,7 +30,7 @@ label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
 .stat b{display:block;font-size:20px}
 .warn{background:#fff3d6;color:#6a4a00;border-radius:8px;padding:8px 12px;margin:8px 0}
-.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.grid,.cgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .dow{background:var(--bg);padding:6px;font-size:12px;color:var(--mute);text-align:center}
 .day{background:var(--card);min-height:96px;padding:4px;font-size:12px}
 .day.off{opacity:.45}
@@ -67,6 +67,31 @@ body{background:#fff;color:#000;font-size:12px}main{padding:0;max-width:none}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;display:none;gap:12px;align-items:center;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:90vw}
 #toast button{background:none;color:inherit;border:1px solid currentColor;padding:3px 10px}
 @media (prefers-color-scheme:dark){.warn,.b-Pending{background:#4a3a10;color:#ffe3a0}.b-Approved{background:#153d2b;color:#a8ecc9}.b-Changes{background:#4d2412;color:#ffc9b0}}
+
+.chip{background:var(--card);background:color-mix(in srgb,var(--pc,#888) 14%,var(--card));color:var(--ink);border-left:4px solid var(--pc,#888);white-space:normal;padding:3px 5px;line-height:1.3;overflow:hidden}
+.chip .cl1,.chip .cl2{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip .cl1{font-weight:500}.chip .cl2{color:var(--mute);font-size:11px}
+.chip .th{float:right;width:30px;height:30px;object-fit:cover;border-radius:4px;margin:0 0 2px 4px}
+.pd{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;flex:none}
+.sb{display:inline-block;border-radius:10px;padding:0 7px;margin:2px 3px 0 0;font-size:10.5px;font-weight:500;line-height:1.6;background:var(--line);color:var(--ink)}
+.s-Approved{background:#d8f3e6;color:#145a3b}.s-Scheduled{background:#dbe8ff;color:#1d4a9a}.s-Posted{background:#177a4e;color:#fff}.s-Draft{background:var(--line);color:var(--mute)}
+@media (prefers-color-scheme:dark){.s-Approved{background:#153d2b;color:#a8ecc9}.s-Scheduled{background:#1d2f57;color:#b9d0ff}}
+.day.today{box-shadow:inset 0 0 0 2px var(--acc)}.day.today>span{background:var(--acc);color:var(--accink);border-radius:10px;padding:0 7px;font-weight:700}
+.sumrow{display:flex;gap:4px 8px;flex-wrap:wrap;align-items:center;margin:12px 0;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:13px}
+.sumrow .sb{font-size:12px;padding:1px 9px;margin:0}
+details.menu{position:relative}details.menu summary{cursor:pointer;list-style:none;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px}
+details.menu summary::-webkit-details-marker{display:none}details.menu summary::after{content:" ▾"}
+.menu .mi{position:absolute;right:0;top:110%;z-index:20;display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;min-width:170px;box-shadow:0 6px 20px #0003}
+.menu .mi button{text-align:left}
+#np::before{content:"＋ "}#tl::before,#st::before{content:"⚙ "}#out::before{content:"↪ "}#hp::before{content:"? "}#rpb::before{content:"▤ "}#yrb::before{content:"▥ "}#icb::before{content:"⇩ "}#allb::before{content:"☰ "}#pr::before{content:"⎙ "}#vwb::before{content:"▦ "}#ap::before{content:"✓ "}#rc::before{content:"✎ "}#cvb::before,#cvb2::before{content:"▦ "}
+.pc{border:1px solid var(--line);border-radius:12px;background:var(--bg);max-width:480px;margin:10px auto;overflow:hidden}
+.pc .ph{display:flex;gap:10px;align-items:center;padding:10px 12px}
+.av{width:38px;height:38px;border-radius:50%;background:var(--acc);color:var(--accink);display:flex;align-items:center;justify-content:center;font-weight:700;object-fit:cover;flex:none}
+.pn{font-weight:700;font-size:14px;line-height:1.2}.ps{font-size:12px;color:var(--mute)}
+.pc .pb{padding:0 12px 10px;white-space:pre-wrap;word-break:break-word}.pimg{display:block;width:100%;max-height:420px;object-fit:cover;margin-bottom:8px}
+.ptags{color:var(--acc);margin-top:4px}.pf2{display:flex;gap:16px;padding:8px 12px;border-top:1px solid var(--line);color:var(--mute);font-size:13px}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:14px;margin:10px 0;color:var(--mute);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media(max-width:640px){main{padding:12px}header{padding:10px 12px}.day{min-height:60px}details.menu summary{min-height:44px;display:flex;align-items:center}.cc .ctx{display:none}.cgrid .day{min-height:54px;padding:2px}.cgrid .cl1{font-size:10px}}
 </style>
 </head>
 <body>
@@ -159,6 +184,8 @@ async function loadPosts(){
 const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:30px;vertical-align:middle;margin-right:8px">`:''}${esc(CNAME)} Content Calendar`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
   $('#out').onclick=async()=>{await sb.auth.signOut();me=null;applyBrand();loginView();};
+  if(me&&me.role==='admin'){const ids=['allb','rpb','yrb','icb','st','pr'].map(i=>document.getElementById(i)).filter(Boolean);
+    if(ids.length){const dt=document.createElement('details');dt.className='menu';dt.innerHTML='<summary>More</summary><div class="mi"></div>';ids.forEach(b=>dt.lastChild.appendChild(b));document.querySelector('header').insertBefore(dt,document.getElementById('tl'));}}
   if($('#tl')) $('#tl').onclick=toolsForm;
   if($('#hp')) $('#hp').onclick=()=>helpForm();
 }
@@ -173,6 +200,37 @@ const vis=v=>{v=String(v||'').trim();if(!/^https?:\/\//i.test(v))return esc(v);
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
 const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
+
+const PCOL={'Google Business Profile':'#1a73e8','Facebook':'#1877f2','Instagram':'#d62976','TikTok':'#69c9d0','LinkedIn':'#0a66c2'};
+const PACT={'Instagram':['Like','Comment','Share','Save'],'Facebook':['Like','Comment','Share'],'LinkedIn':['Like','Comment','Repost','Send'],'TikTok':['Like','Comment','Share'],'Google Business Profile':['Call','Directions','Website']};
+const thumbUrl=(v,sz)=>{v=String(v||'').trim();const m=v.match(/\/d\/([\w-]{10,})/)||v.match(/[?&]id=([\w-]{10,})/);return /drive\.google\.com/i.test(v)&&m?`https://drive.google.com/thumbnail?id=${m[1]}&sz=${sz}`:'';};
+const sbadge=p=>`<span class="sb s-${esc(p.status||'Draft')}">${esc(p.status||'Draft')}</span>${p.approval==='Approved'?'<span class="sb b-Approved">Client OK</span>':p.approval==='Changes requested'?'<span class="sb b-Changes">Changes</span>':''}${!p.caption&&p.status!=='Posted'?'<span class="sb b-Changes">No caption</span>':''}`;
+const apBadge=p=>{const k=p.approval==='Changes requested'?'Changes':p.approval;return `<span class="sb b-${esc(k)}">${k==='Pending'?'To approve':k}</span>`;};
+const chipHtml=p=>{const pc=safeCol(PILLARS[p.pillar]),th=thumbUrl(p.visual,'w120');
+  return `<button class="chip" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1"><span class="pd" style="background:${PCOL[p.platform]||'#888'}"></span>${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
+function postCard(p){
+  const nm=((me&&me.role!=='admin')?CNAME:(clients.find(c=>c.id===cid)||{}).name)||'Your brand';
+  const t=thumbUrl(p.visual,'w1000');
+  const av=LOGO?`<img class="av" src="${esc(LOGO)}" alt="" onerror="this.remove()">`:`<span class="av">${esc(nm.trim().charAt(0).toUpperCase()||'?')}</span>`;
+  const img=t?`<img class="pimg" src="${t}" alt="Post visual" loading="lazy" onerror="this.remove()">`:(p.visual?`<div class="pb">${vis(p.visual)}</div>`:'');
+  const txt=`<div class="pb">${p.caption?esc(p.caption):'<i style="color:var(--mute)">No caption yet.</i>'}${p.hashtags?`<div class="ptags">${esc(p.hashtags)}</div>`:''}</div>`;
+  const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'}):'';
+  const first=p.platform==='Instagram'||p.platform==='TikTok';
+  return `<div class="pc" style="border-top:3px solid ${PCOL[p.platform]||'var(--line)'}"><div class="ph">${av}<div><div class="pn">${esc(nm)}</div><div class="ps">${esc(p.platform||'')}${when?' · '+when:''}</div></div></div>${first?img+txt:txt+img}<div class="pf2">${(PACT[p.platform]||[]).map(a=>`<span>${a}</span>`).join('')}</div></div>`;
+}
+function calView(m){
+  const y=month.getFullYear(),mo=month.getMonth(),first=new Date(y,mo,1),start=new Date(y,mo,1-((first.getDay()+6)%7)),todayS=iso(new Date());
+  let cells='';
+  for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);if(i>=35&&d.getMonth()!==mo)break;const ds=iso(d);
+    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}"><span>${d.getDate()}</span>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1"><span class="pd" style="background:${PCOL[p.platform]||'#888'}"></span><span class="ctx">${esc(p.platform)}</span></span>${apBadge(p)}</button>`).join('')}</div>`;}
+  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button></div>
+  <div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
+  <div class="cgrid" style="margin-top:10px">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
+  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${esc(k)}</span>`).join('')}</div>`;
+  $('#one').onclick=()=>{lv=false;clientView();};$('#lst').onclick=()=>{lv=true;clientView();};
+  $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);clientView();};$('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);clientView();};
+  document.querySelectorAll('.cc').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});
+}
 function adminView(){
   if(vw==='week') return weekView();
   if(vw==='report') return reportView();
@@ -198,32 +256,33 @@ function adminView(){
   const now=new Date(),mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);
   const wk=posts.filter(p=>p.post_date>=iso(mon)&&p.post_date<=iso(sun));
-  const first=new Date(y,m,1),start=new Date(y,m,1-first.getDay());
+  const first=new Date(y,m,1),start=new Date(y,m,1-((first.getDay()+6)%7));
   let cells='';
   for(let i=0;i<42;i++){
     const d=new Date(start);d.setDate(start.getDate()+i);
     if(i>=35&&d.getMonth()!==m)break;
     const ds=iso(d);
-    const dps=posts.filter(p=>p.post_date===ds),chips=dps.slice(0,3).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('')+(dps.length>3?`<button class="more" data-wk="${ds}">+${dps.length-3} more</button>`:'');
-    cells+=`<div class="day${d.getMonth()!==m?' off':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
+    const dps=posts.filter(p=>p.post_date===ds),chips=dps.slice(0,3).map(chipHtml)+(dps.length>3?`<button class="more" data-wk="${ds}">+${dps.length-3} more</button>`:'');
+    cells+=`<div class="day${d.getMonth()!==m?' off':''}${ds===todayS?' today':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
   $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
-  <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
+  <div class="sumrow"><b>${mp.length} posts</b>${STATUS.map(x=>`<span class="sb s-${x}">${cnt(x)} ${x==='Approved'?'approved by you':x}</span>`).join('')}<span class="sb b-Approved">${mp.filter(p=>p.approval==='Approved').length} approved by client</span><span class="sb b-Pending">${mp.filter(p=>p.approval==='Pending').length} awaiting client</span><span class="sb b-Changes">${need} need attention</span></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
   ${nc}
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
   ${clients.length?'':'<div class="warn">No clients yet. Use Tools, Add a client to invite your first one.</div>'}
-  <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
-  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
-  <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
+  ${mp.length?'':'<div class="empty">No posts planned for this month yet. <button class="p np2" type="button">Add the first post</button></div>'}
+  <div class="grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
+  <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span class="sb b-Approved">Client OK</span><span class="sb b-Changes">Changes / no caption</span></div>
+  <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${esc(p.platform)}</b> ${sbadge(p)} <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
   <p class="noprint" style="color:var(--mute);font-size:13px;margin:0">Tip: drag a post onto another day to reschedule it.</p>
   <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}${chk}</main>`;
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
-  $('#np').onclick=()=>postForm();
+  $('#np').onclick=()=>postForm();document.querySelectorAll('.np2').forEach(b=>b.onclick=()=>postForm());
   $('#st').onclick=()=>settingsForm();
   $('#icb').onclick=exportIcs;
   document.querySelectorAll('.agenda .wp').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
@@ -250,7 +309,7 @@ function weekView(){
     const ps=posts.filter(p=>p.post_date===ds).sort((a,b)=>(a.post_time||'99').localeCompare(b.post_time||'99'));
     const kds=keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:13px">★ ${esc(k.label)}</div>`).join('');
     return `<div class="wd${ds===todayS?' today':''}"><h3>${d.toLocaleDateString('en',{weekday:'long',day:'numeric',month:'long'})}</h3>${kds}
-    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' (Manila '+esc(toManila(p.post_date,p.post_time,TZ))+') · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
+    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${esc(p.platform)}</b> ${sbadge(p)} <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' (Manila '+esc(toManila(p.post_date,p.post_time,TZ))+') · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
     <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
   }).join('');
   const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
@@ -604,15 +663,19 @@ async function postForm(p={}){
   <label>Visual / photo (paste a Google Drive link)</label><input name="visual" value="${esc(p.visual)}" placeholder="https://drive.google.com/...">
   <div id="vl" style="margin-top:6px"></div>
   <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">${hsets.length?`<select id="hs" style="margin-top:6px"><option value="">Add a saved hashtag set...</option>${hsets.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('')}</select>`:''}
+  <details style="margin-top:10px"><summary style="cursor:pointer">Preview as a post</summary><div id="pvw"></div></details>
   <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="repost" style="width:auto" ${p.repost?'checked':''}> Evergreen: can be reposted</label><div id="rpd" style="font-size:13px;color:var(--mute)"></div>
-  <h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
-  <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div>
+  <div id="resw" style="display:${p.status==='Posted'?'block':'none'}"><h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
+  <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div></div>
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
   <div id="cmx"></div>
   <p class="err" id="pe"></p>
   <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button><button type="button" id="dup">Duplicate</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
+  $('#pf').status.onchange=e=>{$('#resw').style.display=e.target.value==='Posted'?'block':'none';};
+  const updPv=()=>{const f=$('#pf');$('#pvw').innerHTML=postCard({...p,platform:f.platform.value,caption:f.caption.value,visual:f.visual.value,hashtags:f.hashtags.value,post_date:f.post_date.value});};
+  ['platform','caption','visual','hashtags','post_date'].forEach(n=>$('#pf')[n].addEventListener('input',updPv));updPv();
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
   const updV=()=>{const v=$('#pf').visual.value;$('#vl').innerHTML=/^https?:\/\//i.test(v.trim())?vis(v):'';};
   $('#pf').visual.oninput=updV;updV();
@@ -684,9 +747,9 @@ function listView(m){
   const kk=p=>p.approval==='Changes requested'?'Changes':p.approval;
   const lab={Pending:'Waiting for your approval',Approved:'Approved',Changes:'Changes requested'};
   const shown=posts.filter(p=>flt==='All'||p.approval===flt);
-  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="aa" class="ok">Approve all waiting</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
+  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="cvb2">Calendar</button><button id="aa" class="ok">Approve all waiting</button><select id="ft" style="width:auto" aria-label="Filter posts">${['All','Pending','Approved','Changes requested'].map(f=>`<option value="${f}"${f===flt?' selected':''}>${f==='All'?'All posts':f==='Pending'?'Waiting for approval':f}</option>`).join('')}</select><span style="color:var(--mute)">${shown.length} of ${posts.length} posts</span></div>
   ${shown.map(p=>`<button class="card" data-i="${posts.indexOf(p)}" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:14px"><div class="row"><b>${p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}):'No date'}</b><span style="color:var(--mute)">${esc(p.platform)}</span><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])};font-size:12px">${esc(p.pillar)}</span><span class="badge b-${kk(p)}" style="margin-left:auto;font-size:12px">${lab[kk(p)]}</span></div><div style="margin-top:6px;color:var(--mute)">${esc((p.caption||'No caption yet.').slice(0,140))}</div></button>`).join('')||'<div class="card">No posts match this filter.</div>'}`;
-  $('#one').onclick=()=>{lv=false;clientView();};
+  $('#one').onclick=()=>{lv=false;clientView();};$('#cvb2').onclick=()=>{lv='cal';clientView();};
   $('#aa').onclick=async()=>{const pend=posts.filter(x=>x.approval==='Pending');if(!pend.length)return alert('Nothing is waiting for approval.');
     if(!confirm('Approve all '+pend.length+' waiting posts?'))return;
     for(const x of pend){const r=await sb.rpc('set_approval',{p_post:x.id,p_approval:'Approved'});if(r.error){await loadPosts();clientView();return alert('Could not save: '+r.error.message);}}
@@ -699,19 +762,18 @@ function clientView(){
   bindOut();
   const m=$('#cm');
   if(!posts.length){m.innerHTML='<div class="card">No posts have been added to your calendar yet. Check back soon.</div>';return;}
-  if(lv) return listView(m);
+  if(lv) return lv==='cal'?calView(m):listView(m);
   idx=Math.min(idx,posts.length-1);
   const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
-  m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><button id="lv">View all posts</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
+  m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><button id="lv">All posts</button><button id="cvb">Calendar</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
   <div class="card"><div class="row"><span class="badge b-${k}">${k==='Pending'?'Waiting for your approval':k==='Approved'?'Approved':'Changes requested'}</span>
   <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(p.post_time.slice(0,5)):''}</span></div>
-  <div class="cap">${esc(p.caption)||'<i>No caption yet.</i>'}</div>
-  ${p.visual?`<p><b>Visual:</b> ${vis(p.visual)}</p>`:''}
-  <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
+  ${postCard(p)}
   <div class="row stickybar"><button class="ok" id="ap">Approve</button><button class="bad" id="rc">Request changes</button></div>
+  <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
   <div id="cmx" style="margin-top:14px"></div></div>`;
-  $('#lv').onclick=()=>{lv=true;clientView();};
+  $('#lv').onclick=()=>{lv=true;clientView();};$('#cvb').onclick=()=>{lv='cal';clientView();};
   let x0=null;m.ontouchstart=e=>{x0=e.touches[0].clientX;};
   m.ontouchend=e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)<70)return;if(dx<0&&idx<posts.length-1){idx++;clientView();}else if(dx>0&&idx>0){idx--;clientView();}};
   $('#pv').onclick=()=>{idx--;clientView();};$('#nx').onclick=()=>{idx++;clientView();};
@@ -726,6 +788,7 @@ function clientView(){
   showComments(p.id,'#cmx');
 }
 async function boot(){
+  $('#app').innerHTML='<div class="login" role="status"><p style="margin:0;color:var(--mute)">Loading your calendar…</p></div>';
   try{await boot0();}
   catch(e){$('#app').innerHTML='<div class="login"><h1 style="margin-top:0">Can\u2019t connect</h1><p>Check your internet connection and try again.</p><button class="p" id="rt" style="width:100%">Try again</button></div>';$('#rt').onclick=boot;}
 }
