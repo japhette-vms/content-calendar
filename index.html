@@ -93,7 +93,7 @@ async function boot(){
   if(me.role==='admin'){
     const r=await sb.from('clients').select('*').order('name');
     clients=r.data||[];cid=clients[0]?.id||null;
-  } else cid=me.client_id;
+  } else {cid=me.client_id;const cr=await sb.from('clients').select('name').eq('id',cid).maybeSingle();CNAME=(cr.data&&cr.data.name)||'';}
   await loadPosts();
   me.role==='admin'?adminView():clientView();
 }
@@ -121,16 +121,20 @@ async function loadPosts(){
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
   if(me&&me.role==='admin'){const hs=await sb.from('hashtag_sets').select('*').eq('client_id',cid).order('name');hsets=hs.data||[];}else hsets=[];
+  BRAND=s.brand_color||null;LOGO=s.logo_url||'';TZ=s.tz||'America/Denver';applyBrand();
+  newCm=[];
+  if(me&&me.role==='admin'){const cr=await sb.from('comments').select('id,post_id,body,created_at,author_id').gt('created_at',seenGet(cid)).neq('author_id',user.id).order('created_at',{ascending:false});const ids=new Set(posts.map(x=>x.id));newCm=(cr.data||[]).filter(c=>ids.has(c.post_id));}
 }
-const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
+const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:30px;vertical-align:middle;margin-right:8px">`:''}${esc(CNAME)} Content Calendar`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
-  $('#out').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};
+  $('#out').onclick=async()=>{await sb.auth.signOut();me=null;applyBrand();loginView();};
   if($('#tl')) $('#tl').onclick=toolsForm;
   if($('#hp')) $('#hp').onclick=()=>helpForm();
 }
 
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null,hsets=[],yr=new Date().getFullYear();
+let newCm=[],BRAND=null,LOGO='',TZ='America/Denver',CNAME='';
 const vis=v=>/^https?:\/\//i.test(String(v||'').trim())?`<a class="lnk" href="${esc(String(v).trim())}" target="_blank" rel="noopener noreferrer">Open the photo or video ↗</a>`:esc(v);
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
@@ -139,6 +143,7 @@ function adminView(){
   if(vw==='week') return weekView();
   if(vw==='report') return reportView();
   if(vw==='year') return yearView();
+  if(vw==='all') return allView();
   const y=month.getFullYear(),m=month.getMonth();
   const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
   const cnt=s=>mp.filter(p=>p.status===s).length;
@@ -146,6 +151,10 @@ function adminView(){
   const tot=k=>mp.reduce((a,p)=>a+(+p[k]||0),0);
   const todayS=iso(new Date());
   const ready=posts.filter(p=>p.repost&&p.status==='Posted'&&p.post_date&&addDays(p.post_date,GAP)<=todayS&&!posts.some(q=>q.id!==p.id&&q.caption===p.caption&&q.post_date>p.post_date)).slice(0,6);
+  const issues=posts.filter(p=>checks(p).some(x=>x!==RES)).slice(0,8);
+  const noRes=posts.filter(p=>checks(p).includes(RES)).length;
+  const chk=(issues.length||noRes)?`<h3>Things to check</h3>${issues.map(p=>`<button class="stat ck" data-id="${p.id}" style="display:block;width:100%;text-align:left;margin-bottom:6px"><b style="font-size:14px">${esc(p.post_date||'No date')} · ${esc(p.platform)}</b> ${esc(checks(p).filter(x=>x!==RES).join(', '))}</button>`).join('')}${noRes?`<p style="color:var(--mute)">${noRes} posted post(s) older than a week have no results yet.</p>`:''}`:'';
+  const nc=newCm.length?`<div class="card" style="padding:12px;margin:10px 0"><div class="row"><b>New comments (${newCm.length})</b><button type="button" id="ms" style="margin-left:auto">Mark all as seen</button></div>${newCm.slice(0,5).map(c=>{const q=posts.find(x=>x.id===c.post_id)||{};return `<button class="wp ncb" data-id="${c.post_id}"><div style="flex:1"><span class="meta">${esc(q.post_date||'')} · ${esc(q.platform||'')}</span><div>${esc((c.body||'').slice(0,120))}</div></div></button>`;}).join('')}${newCm.length>5?`<small>and ${newCm.length-5} more</small>`:''}</div>`:'';
   const rdy=ready.length?`<h3>Ready to repost</h3><div class="pace">${ready.map(p=>`<button class="stat rr" data-id="${p.id}" style="text-align:left"><b style="font-size:14px">${esc(p.platform)} · ${esc(p.post_date)}</b>${esc((p.caption||'').slice(0,60))}</button>`).join('')}</div>`:'';
   const tiles=mp.some(p=>M.some(([k])=>p[k]!=null))?M.filter(([k])=>tot(k)>0).map(([k,l])=>`<div class="stat"><b>${tot(k).toLocaleString()}</b>${l}</div>`).join(''):'';
   // mix warning
@@ -162,17 +171,19 @@ function adminView(){
     if(i>=35&&d.getMonth()!==m)break;
     const ds=iso(d);
     const chips=posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip" style="background:${PILLARS[p.pillar]||'#6b6f85'}" data-id="${p.id}">${MARK[p.status]||'○'} ${esc((p.platform||'').split(' ')[0])}${p.approval==='Approved'?' ✓':''}${flag(p)?' (!)':''}</button>`).join('');
-    cells+=`<div class="day${d.getMonth()!==m?' off':''}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
+    cells+=`<div class="day${d.getMonth()!==m?' off':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
+  ${nc}
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
   ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
-  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}</main>`;
+  <p class="noprint" style="color:var(--mute);font-size:13px;margin:0">Tip: drag a post onto another day to reschedule it.</p>
+  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}${chk}</main>`;
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
@@ -181,9 +192,13 @@ function adminView(){
   $('#st').onclick=()=>settingsForm();
   $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#yrb').onclick=()=>{vw='year';yr=month.getFullYear();adminView();};
+  $('#allb').onclick=()=>{vw='all';adminView();};
   $('#vwb').onclick=()=>{vw='week';const n=new Date();wkStart=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));adminView();};
+  document.querySelectorAll('.ck,.ncb').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+  if($('#ms')) $('#ms').onclick=()=>{seenSet(cid);newCm=[];adminView();};
   document.querySelectorAll('.rr').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
-  document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+  document.querySelectorAll('.chip').forEach(b=>{b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id));b.draggable=true;b.ondragstart=e=>e.dataTransfer.setData('text/plain',b.dataset.id);});
+  document.querySelectorAll('.day').forEach(c=>{c.ondragover=e=>e.preventDefault();c.ondrop=async e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain'),q=posts.find(x=>x.id===id);if(!q||q.post_date===c.dataset.date)return;const r=await sb.from('posts').update({post_date:c.dataset.date}).eq('id',id);if(r.error)return alert('Could not move: '+r.error.message);await loadPosts();adminView();};});
 }
 
 function weekView(){
@@ -197,7 +212,7 @@ function weekView(){
     const ps=posts.filter(p=>p.post_date===ds).sort((a,b)=>(a.post_time||'99').localeCompare(b.post_time||'99'));
     const kds=keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:13px">★ ${esc(k.label)}</div>`).join('');
     return `<div class="wd${ds===todayS?' today':''}"><h3>${d.toLocaleDateString('en',{weekday:'long',day:'numeric',month:'long'})}</h3>${kds}
-    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
+    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${MARK[p.status]||'○'} ${esc(p.platform)}</b> <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' (Manila '+esc(toManila(p.post_date,p.post_time,TZ))+') · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
     <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
   }).join('');
   const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
@@ -259,13 +274,15 @@ function toolsForm(){
   <div style="display:grid;gap:8px">
   <button type="button" id="t1">Add a client</button>
   <button type="button" id="t2">Import posts from Excel</button>
+  <button type="button" id="t6">Export posts to CSV</button>
   <button type="button" id="t4">Ideas Bank</button>
   <button type="button" id="t5">Hashtag sets</button>
+  <button type="button" id="t7">Change my password</button>
   <button type="button" id="t3">Help guide</button></div>
   <div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
-  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);$('#t4').onclick=ideasForm;$('#t5').onclick=hashtagForm;
+  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);$('#t4').onclick=ideasForm;$('#t6').onclick=()=>{d.close();exportCsv();};$('#t7').onclick=pwForm;$('#t5').onclick=hashtagForm;
 }
 function addClientForm(){
   const d=$('#dlg');
@@ -353,14 +370,16 @@ function helpForm(admin){
   d.innerHTML=isA?`<h2 style="margin-top:0">Help guide</h2>
   <h3>Everyday use</h3><ul><li><b>New post</b>: fill in the form and Save. Click a post on the calendar to edit it, or to read the client's comments.</li>
   <li><b>Client approval</b> starts as Pending. The client approves or asks for changes in their own login; you will see ✓ or (!) on the calendar.</li>
-  <li><b>Week view</b> shows one week in detail. <b>Print</b> makes a clean page.</li>
+  <li><b>All clients</b> shows every client's waiting approvals, requested changes, upcoming posts, issues and new comments. Click a client to open them.</li>
+  <li><b>Week view</b> shows one week in detail, with the Manila time. <b>Print</b> makes a clean page.</li>
+  <li>Drag a post onto another day to reschedule it. <b>Things to check</b> lists posts with problems (no caption, no time, date passed, and so on). <b>New comments</b> shows client comments since you last clicked Mark all as seen.</li>
   <li><b>Visual / photo</b>: upload the photo or video to Google Drive, set sharing to "Anyone with the link", and paste the link. The client sees an <b>Open the photo or video</b> button.</li>
   <li><b>Results</b>: after a post is live, open it and type the numbers under Results.</li>
   <li><b>Year</b> shows all 12 months at a glance. Click a month to open it.</li>
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
-  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
+  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li><li><b>Export posts to CSV</b>: downloads the selected client's posts as a spreadsheet backup. <b>Change my password</b> is here too.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
   <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
   :`<h2 style="margin-top:0">How to use this calendar</h2>
   <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
@@ -369,8 +388,8 @@ function helpForm(admin){
   <li>Use <b>View all posts</b> to see a list. The filter at the top can show only posts waiting for your approval.</li>
   <li>You can add a comment on any post. Your social media manager will see it.</li></ul>
   <p style="color:var(--mute)">You can only see your own calendar. Questions? Contact your social media manager.</p>`;
-  d.innerHTML+=`<div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
-  d.showModal();$('#cx').onclick=()=>d.close();
+  d.innerHTML+=`<div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button>${isA?'':'<button type="button" id="pw">Change my password</button>'}</div>`;
+  d.showModal();$('#cx').onclick=()=>d.close();if($('#pw'))$('#pw').onclick=pwForm;
 }
 
 async function hashtagForm(editId){
@@ -459,15 +478,72 @@ function yearView(){
   $('#ny').onclick=()=>{yr++;adminView();};
   document.querySelectorAll('.ym').forEach(b=>b.onclick=()=>{month=new Date(yr,+b.dataset.m,1);vw='month';adminView();});
 }
+
+const RES='Add results';
+const TZS=[['America/New_York','US Eastern (New York)'],['America/Chicago','US Central (Chicago)'],['America/Denver','US Mountain (Denver, Utah)'],['America/Phoenix','US Mountain, no daylight saving (Phoenix)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Anchorage','Alaska'],['Pacific/Honolulu','Hawaii'],['America/Toronto','Canada Eastern (Toronto)'],['Europe/London','UK (London)'],['Europe/Paris','Central Europe (Paris)'],['Australia/Sydney','Sydney'],['Asia/Singapore','Singapore'],['Asia/Manila','Manila']];
+const seenGet=c=>{try{return localStorage.getItem('seen:'+c)||'1970-01-01T00:00:00Z';}catch(e){return '1970-01-01T00:00:00Z';}};
+const seenSet=c=>{try{localStorage.setItem('seen:'+c,new Date().toISOString());}catch(e){}};
+function applyBrand(){const r=document.documentElement.style;
+  if(me&&me.role==='client'&&BRAND){r.setProperty('--acc',BRAND);const n=parseInt(BRAND.slice(1),16),L=(0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255;r.setProperty('--accink',L>0.6?'#14151f':'#ffffff');}
+  else{r.removeProperty('--acc');r.removeProperty('--accink');}}
+function checks(p){const td=iso(new Date()),a=[],done=p.status==='Posted';
+  if(p.approval==='Changes requested')a.push('Client asked for changes');
+  if(!p.caption&&!done)a.push('No caption');
+  if(!p.post_time&&!done)a.push('No time set');
+  if(p.status==='Scheduled'&&p.approval!=='Approved')a.push('Scheduled without client approval');
+  if(p.post_date&&p.post_date<td&&!done)a.push('Date passed, not posted');
+  if(p.asset_due_date&&p.assets_ready!=='Yes'&&p.asset_due_date<td&&!done)a.push('Assets overdue');
+  if(done&&p.post_date&&addDays(p.post_date,7)<=td&&p.reach==null)a.push(RES);
+  return a;}
+function tzOff(ms,tz){const f=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric'});
+  const q=Object.fromEntries(f.formatToParts(new Date(ms)).map(x=>[x.type,x.value]));
+  return Date.UTC(+q.year,+q.month-1,+q.day,+q.hour%24,+q.minute,+q.second)-ms;}
+function toManila(ds,ts,tz){try{if(!ds||!ts)return '';const [y,m,d]=ds.split('-').map(Number),[h,mi]=ts.slice(0,5).split(':').map(Number);
+  const g=Date.UTC(y,m-1,d,h,mi);let t=g-tzOff(g,tz);t=g-tzOff(t,tz);
+  return new Date(t).toLocaleString('en-US',{timeZone:'Asia/Manila',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(e){return '';}}
+function pwForm(){const d=$('#dlg');
+  d.innerHTML=`<form id="wf"><h2 style="margin-top:0">Change password</h2><label>New password (at least 8 characters)</label><input name="a" type="password" minlength="8" required autocomplete="new-password"><label>Type it again</label><input name="b" type="password" minlength="8" required autocomplete="new-password"><p class="err" id="we"></p><div class="row"><button class="p">Change password</button><button type="button" id="cx">Cancel</button></div></form>`;
+  if(!d.open) d.showModal();$('#cx').onclick=()=>d.close();
+  $('#wf').onsubmit=async ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
+    if(f.a!==f.b) return $('#we').textContent='The two passwords do not match.';
+    const r=await sb.auth.updateUser({password:f.a});
+    if(r.error) return $('#we').textContent='Could not change it: '+r.error.message;
+    d.close();alert('Password changed.');};}
+function exportCsv(){
+  if(!posts.length) return alert('No posts to export.');
+  const cols=['post_date','post_time','platform','pillar','format','status','approval','campaign','caption','visual','hashtags','notes','reach','likes','comments_count','shares_saves','dms_inquiries','link_clicks','engagements'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const csv='\ufeff'+cols.join(',')+'\r\n'+posts.map(p=>cols.map(c=>q(p[c])).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=((clients.find(c=>c.id===cid)||{}).name||'client').replace(/[^\w-]+/g,'_')+'_posts_'+iso(new Date())+'.csv';
+  document.body.appendChild(a);a.click();a.remove();}
+async function fetchAll(t,cols){let a=[],f=0;for(;;){const r=await sb.from(t).select(cols).range(f,f+999);if(r.error)throw r.error;a=a.concat(r.data);if(r.data.length<1000)break;f+=1000;}return a;}
+async function allView(){
+  $('#app').innerHTML=head()+'<main><p>Loading all clients...</p></main>';bindOut();
+  let ap,ac;
+  try{ap=await fetchAll('posts','id,client_id,post_date,post_time,status,approval,caption,asset_due_date,assets_ready,reach');ac=await fetchAll('comments','id,post_id,author_id,created_at');}
+  catch(e){alert('Could not load: '+e.message);vw='month';return adminView();}
+  const td=iso(new Date()),wk=addDays(td,7);
+  const rows=clients.map(c=>{const ps=ap.filter(p=>p.client_id===c.id),ids=new Set(ps.map(p=>p.id)),seen=seenGet(c.id);
+    return {c,wait:ps.filter(p=>p.approval==='Pending'&&p.status!=='Posted'&&p.post_date>=td).length,chg:ps.filter(p=>p.approval==='Changes requested').length,next:ps.filter(p=>p.post_date>=td&&p.post_date<=wk).length,iss:ps.filter(p=>checks(p).some(x=>x!==RES)).length,nc:ac.filter(x=>ids.has(x.post_id)&&x.author_id!==user.id&&x.created_at>seen).length};});
+  const cell=n=>`<td style="padding:8px 6px;text-align:center;${n>0?'color:#e0634f;font-weight:700':'color:var(--mute)'}">${n}</td>`;
+  $('#app').innerHTML=head('<button id="bk">Back to calendar</button><button id="pr">Print</button>')+
+  `<main><h2 style="margin-top:0">All clients</h2><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr style="color:var(--mute);font-size:13px"><th style="text-align:left;padding:6px">Client</th><th>Waiting for approval</th><th>Changes requested</th><th>Posts in next 7 days</th><th>Things to check</th><th>New comments</th></tr>
+  ${rows.map(r=>`<tr class="ac" data-c="${r.c.id}" style="border-top:1px solid var(--line);cursor:pointer"><td style="padding:8px 6px"><b>${esc(r.c.name)}</b></td>${cell(r.wait)}<td style="text-align:center;padding:8px 6px;${r.chg>0?'color:#e0634f;font-weight:700':'color:var(--mute)'}">${r.chg}</td>${cell(r.next).replace('#e0634f','var(--ink)')}${cell(r.iss)}${cell(r.nc)}</tr>`).join('')}</table></div>
+  <p style="color:var(--mute);font-size:13px">Click a client to open their calendar. Red numbers need your attention.</p></main>`;
+  $('#bk').onclick=()=>{vw='month';adminView();};
+  $('#pr').onclick=()=>window.print();
+  document.querySelectorAll('.ac').forEach(tr=>tr.onclick=async()=>{cid=tr.dataset.c;await loadPosts();vw='month';adminView();});
+}
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
 
 async function postForm(p={}){
   if(!cid) return alert('Add a client first.');
   const d=$('#dlg');
-  d.innerHTML=`<form id="pf"><h2 style="margin-top:0">${p.id?'Edit post':'New post'}</h2>
+  d.innerHTML=`<form id="pf" autocomplete="off"><h2 style="margin-top:0">${p.id?'Edit post':'New post'}</h2>${p.id&&checks(p).length?`<div class="warn">To check: ${esc(checks(p).join(', '))}</div>`:''}
   <div class="g2"><div><label>Date</label><input name="post_date" type="date" required value="${p.post_date||''}"></div>
-  <div><label>Time (client's local time)</label><input name="post_time" type="time" value="${(p.post_time||'').slice(0,5)}"></div>
+  <div><label>Time (client's local time)</label><input name="post_time" type="time" value="${(p.post_time||'').slice(0,5)}"><div id="mn" style="font-size:12px;color:var(--mute)"></div></div>
   <div><label>Platform</label><select name="platform">${opts(PLATFORMS,p.platform)}</select></div>
   <div><label>Content pillar</label><select name="pillar"><option value=""${p.id&&!p.pillar?' selected':''}>(none)</option>${opts(Object.keys(PILLARS),p.pillar||(p.id?null:Object.keys(PILLARS)[0]))}</select></div>
   <div><label>Format</label><select name="format">${opts(FORMATS,p.format)}</select></div>
@@ -490,7 +566,8 @@ async function postForm(p={}){
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
   const updV=()=>{$('#vl').innerHTML=vis($('#pf').visual.value).startsWith('<a')?vis($('#pf').visual.value):'';};
   $('#pf').visual.oninput=updV;updV();
-  $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=updRp;updRp();
+  const updMn=()=>{const f=$('#pf');$('#mn').textContent=f.post_time.value&&f.post_date.value?'Manila: '+toManila(f.post_date.value,f.post_time.value,TZ):'';};
+  $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=()=>{updRp();updMn();};$('#pf').post_time.onchange=updMn;updRp();updMn();
   if($('#hs')) $('#hs').onchange=e=>{const h=hsets.find(x=>x.id===e.target.value);if(h){const i=$('#pf').hashtags;i.value=(i.value.trim()?i.value.trim()+' ':'')+h.tags;}e.target.value='';};
   if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) showComments(p.id,'#cmx');
@@ -513,6 +590,10 @@ function settingsForm(){
   <h3>Content pillars</h3>${pl.map(([n,c],i)=>`<div class="row" style="margin-top:6px"><input name="pn${i}" value="${esc(n)}" placeholder="New pillar" style="flex:1"><input type="color" name="pc${i}" value="${c}" style="width:56px;padding:2px"></div>`).join('')}
   <p style="font-size:12px;color:var(--mute)">Renaming a pillar does not change posts already saved under the old name.</p>
   <div class="g2"><div><label>Warn when one pillar is over (%)</label><input type="number" name="mix" value="${MIX}"></div><div><label>Repost gap (days)</label><input type="number" name="gap" value="${GAP}"></div></div>
+  <h3>Time zone and client branding</h3>
+  <label>Client time zone (used for the Manila time)</label><select name="tz">${TZS.map(([v,l])=>`<option value="${v}"${v===TZ?' selected':''}>${l}</option>`).join('')}</select>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="usebrand" style="width:auto"${BRAND?' checked':''}> Use a brand colour on the client's screen</label><input type="color" name="brand" value="${BRAND||'#4b3fd6'}" style="width:56px;padding:2px">
+  <label>Logo address (optional, shown on the client's screen)</label><input name="logo" value="${esc(LOGO)}" placeholder="https://japhette-vms.github.io/content-calendar/logo.png">
   <p class="err" id="se"></p><div class="row"><button class="p">Save settings</button><button type="button" id="sx">Close</button></div></form>
   <h3>Key dates</h3><div id="kdl"></div>
   <div class="row" style="margin-top:8px"><input type="date" id="kdd" style="width:auto"><input id="kdt" placeholder="e.g. Thanksgiving" style="flex:1"><button type="button" id="kda">Add</button></div>`;
@@ -529,7 +610,7 @@ function settingsForm(){
     PLATFORMS.forEach(p=>goals[p]=+f['g:'+p]||0);
     pl.forEach((_,i)=>{const n=(f['pn'+i]||'').trim();if(n)pillars[n]=f['pc'+i];});
     if(!Object.keys(pillars).length) return $('#se').textContent='Keep at least one pillar.';
-    const r=await sb.from('client_settings').upsert({client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75});
+    const r=await sb.from('client_settings').upsert({client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75,tz:f.tz,brand_color:f.usebrand?f.brand:null,logo_url:/^https:\/\//i.test((f.logo||'').trim())?f.logo.trim():null});
     if(r.error) return $('#se').textContent='Could not save: '+r.error.message;
     d.close();await loadPosts();adminView();};
   d.showModal();
