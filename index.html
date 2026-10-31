@@ -103,7 +103,9 @@ async function loadPosts(){
   keyDates=kd.data||[];
   const st=await sb.from('client_settings').select('*').eq('client_id',cid).maybeSingle();
   const s=st.data||{};
-  PILLARS=s.pillars&&Object.keys(s.pillars).length?s.pillars:{...DEF_P};
+  const rawP=s.pillars&&Object.keys(s.pillars).length?s.pillars:{...DEF_P};
+  const ord=Object.keys(DEF_P);
+  PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=rawP[k]);
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
 }
@@ -134,7 +136,7 @@ function adminView(){
   }
   $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
-  <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
+  <div class="stats"><div class="stat"><b>${mp.length}</b>Posts this month</div>${STATUS.map(s=>`<div class="stat"><b>${cnt(s)}</b>${MARK[s]} ${s==='Approved'?'Status: Approved':s}</div>`).join('')}<div class="stat"><b>${mp.filter(p=>p.approval==='Approved').length}</b>✓ Client approved</div><div class="stat"><b>${mp.filter(p=>p.approval==='Pending').length}</b>Awaiting approval</div><div class="stat"><b>${need}</b>(!) Need attention</div></div>
   ${over.map(([k,v])=>`<div class="warn">${esc(k)} is ${Math.round(v/mp.length*100)}% of this month's posts. Consider mixing in other pillars.</div>`).join('')}
   ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
