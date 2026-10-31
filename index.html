@@ -45,6 +45,7 @@ label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
 .cm{border-top:1px solid var(--line);padding:6px 0;font-size:14px}.cm small{color:var(--mute)}
 dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);width:min(560px,94vw);padding:20px}
 dialog::backdrop{background:#0008}
+dialog{max-height:90vh;overflow:auto}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 .err{color:#c2410c;font-size:14px;min-height:20px}
 .wd{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:10px}
@@ -118,6 +119,7 @@ async function loadPosts(){
   PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=rawP[k]);
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
   MIX=s.mix_threshold||40;GAP=s.repost_gap||75;
+  if(me&&me.role==='admin'){const hs=await sb.from('hashtag_sets').select('*').eq('client_id',cid).order('name');hsets=hs.data||[];}else hsets=[];
 }
 const head=(extra='')=>`<header><h1>Content Calendar</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
@@ -127,7 +129,8 @@ function bindOut(){
 }
 
 /* ---------- Admin ---------- */
-let vw='month',wkStart=null;
+let vw='month',wkStart=null,hsets=[];
+const addDays=(ds,n)=>{const d=new Date(ds+'T00:00');d.setDate(d.getDate()+n);return iso(d);};
 const M=[['reach','Reach'],['likes','Likes'],['comments_count','Comments'],['shares_saves','Shares / saves'],['dms_inquiries','DMs / inquiries'],['link_clicks','Link clicks'],['engagements','Engagements']];
 const inMonth=(p,y,m)=>{if(!p.post_date)return false;const d=new Date(p.post_date+'T00:00');return d.getMonth()===m&&d.getFullYear()===y;};
 function adminView(){
@@ -138,6 +141,9 @@ function adminView(){
   const cnt=s=>mp.filter(p=>p.status===s).length;
   const need=mp.filter(p=>flag(p)).length;
   const tot=k=>mp.reduce((a,p)=>a+(+p[k]||0),0);
+  const todayS=iso(new Date());
+  const ready=posts.filter(p=>p.repost&&p.status==='Posted'&&p.post_date&&addDays(p.post_date,GAP)<=todayS&&!posts.some(q=>q.id!==p.id&&q.caption===p.caption&&q.post_date>p.post_date)).slice(0,6);
+  const rdy=ready.length?`<h3>Ready to repost</h3><div class="pace">${ready.map(p=>`<button class="stat rr" data-id="${p.id}" style="text-align:left"><b style="font-size:14px">${esc(p.platform)} · ${esc(p.post_date)}</b>${esc((p.caption||'').slice(0,60))}</button>`).join('')}</div>`:'';
   const tiles=mp.some(p=>M.some(([k])=>p[k]!=null))?M.filter(([k])=>tot(k)>0).map(([k,l])=>`<div class="stat"><b>${tot(k).toLocaleString()}</b>${l}</div>`).join(''):'';
   // mix warning
   const byP={};mp.forEach(p=>byP[p.pillar]=(byP[p.pillar]||0)+1);
@@ -163,7 +169,7 @@ function adminView(){
   ${clients.length?'':'<div class="warn">No clients yet. Add one in Supabase (see the handover SQL), then refresh.</div>'}
   <div class="grid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}<span>✓ client approved</span><span>(!) changes requested or no caption</span></div>
-  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div></main>`;
+  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}</main>`;
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
@@ -172,6 +178,7 @@ function adminView(){
   $('#st').onclick=()=>settingsForm();
   $('#rpb').onclick=()=>{vw='report';adminView();};
   $('#vwb').onclick=()=>{vw='week';const n=new Date();wkStart=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));adminView();};
+  document.querySelectorAll('.rr').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
   document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
 }
 
@@ -247,11 +254,13 @@ function toolsForm(){
   <div style="display:grid;gap:8px">
   <button type="button" id="t1">Add a client</button>
   <button type="button" id="t2">Import posts from Excel</button>
+  <button type="button" id="t4">Ideas Bank</button>
+  <button type="button" id="t5">Hashtag sets</button>
   <button type="button" id="t3">Help guide</button></div>
   <div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
-  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);
+  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);$('#t4').onclick=ideasForm;$('#t5').onclick=hashtagForm;
 }
 function addClientForm(){
   const d=$('#dlg');
@@ -342,7 +351,7 @@ function helpForm(admin){
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
-  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li></ul>
+  <h3>Tools</h3><ul><li><b>Add a client</b>: create their login in Supabase first, then add their name and email here.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
   <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
   :`<h2 style="margin-top:0">How to use this calendar</h2>
   <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
@@ -352,6 +361,62 @@ function helpForm(admin){
   <p style="color:var(--mute)">You can only see your own calendar. Questions? Contact your social media manager.</p>`;
   d.innerHTML+=`<div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
   d.showModal();$('#cx').onclick=()=>d.close();
+}
+
+async function hashtagForm(editId){
+  const d=$('#dlg');const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  const r=await sb.from('hashtag_sets').select('*').eq('client_id',cid).order('name');
+  if(r.error){alert('Could not load hashtag sets: '+r.error.message);return;}
+  hsets=r.data||[];
+  const cur=typeof editId==='string'?hsets.find(h=>h.id===editId):null;
+  d.innerHTML=`<h2 style="margin-top:0">Hashtag sets: ${esc(cname)}</h2>
+  ${hsets.map(h=>`<div class="cm"><b>${esc(h.name)}</b><div style="color:var(--mute);font-size:13px">${esc(h.tags)}</div><div class="row" style="margin-top:4px"><button type="button" data-e="${h.id}">Edit</button><button type="button" class="bad" data-d="${h.id}">Delete</button></div></div>`).join('')||'<p style="color:var(--mute)">No sets yet.</p>'}
+  <form id="hf" style="margin-top:12px"><h3 style="margin:0">${cur?'Edit set':'New set'}</h3>
+  <label>Set name</label><input name="n" required value="${esc(cur?.name)}" placeholder="e.g. Skin care basics">
+  <label>Hashtags</label><textarea name="t" rows="3" required placeholder="#skincare #glow #selfcare">${esc(cur?.tags)}</textarea>
+  <p class="err" id="he"></p>
+  <div class="row"><button class="p">${cur?'Save changes':'Add set'}</button><button type="button" id="cx">Close</button></div></form>`;
+  if(!d.open) d.showModal();
+  $('#cx').onclick=()=>d.close();
+  d.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>hashtagForm(b.dataset.e));
+  d.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this set?'))return;await sb.from('hashtag_sets').delete().eq('id',b.dataset.d);hashtagForm();});
+  $('#hf').onsubmit=async ev=>{ev.preventDefault();
+    const f=Object.fromEntries(new FormData(ev.target));
+    const row={client_id:cid,name:f.n.trim(),tags:f.t.trim()};
+    const w=cur?await sb.from('hashtag_sets').update(row).eq('id',cur.id):await sb.from('hashtag_sets').insert(row);
+    if(w.error) return $('#he').textContent='Could not save: '+w.error.message;
+    hashtagForm();};
+}
+let ideaFlt='Idea';
+async function ideasForm(){
+  const d=$('#dlg');const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  const r=await sb.from('ideas').select('*').eq('client_id',cid).order('created_at',{ascending:false});
+  if(r.error){alert('Could not load ideas: '+r.error.message);return;}
+  const all=r.data||[],list=ideaFlt==='All'?all:all.filter(i=>i.status===ideaFlt);
+  d.innerHTML=`<h2 style="margin-top:0">Ideas Bank: ${esc(cname)}</h2>
+  <div class="row"><select id="if" style="width:auto" aria-label="Filter ideas">${['Idea','Planned','Used','All'].map(f=>`<option${f===ideaFlt?' selected':''}>${f}</option>`).join('')}</select><span style="color:var(--mute)">${list.length} shown</span></div>
+  ${list.map(i=>`<div class="cm"><b>${esc(i.title)}</b><div style="color:var(--mute);font-size:13px">${[i.pillar,i.platform].filter(Boolean).map(esc).join(' · ')}</div>${i.notes?`<div>${esc(i.notes)}</div>`:''}
+  <div class="row" style="margin-top:4px"><button type="button" class="p" data-m="${i.id}">Make post</button><select data-s="${i.id}" style="width:auto" aria-label="Idea status">${['Idea','Planned','Used'].map(x=>`<option${x===i.status?' selected':''}>${x}</option>`).join('')}</select><button type="button" class="bad" data-d="${i.id}">Delete</button></div></div>`).join('')||'<p style="color:var(--mute)">Nothing here yet.</p>'}
+  <form id="idf" style="margin-top:12px"><h3 style="margin:0">New idea</h3>
+  <label>Idea</label><input name="t" required placeholder="e.g. Before and after client story">
+  <div class="g2"><div><label>Pillar (optional)</label><select name="p"><option value="">Any</option>${opts(Object.keys(PILLARS))}</select></div>
+  <div><label>Platform (optional)</label><select name="pl"><option value="">Any</option>${opts(PLATFORMS)}</select></div></div>
+  <label>Notes</label><textarea name="n" rows="2"></textarea>
+  <p class="err" id="ie"></p>
+  <div class="row"><button class="p">Add idea</button><button type="button" id="cx">Close</button></div></form>`;
+  if(!d.open) d.showModal();
+  $('#cx').onclick=()=>d.close();
+  $('#if').onchange=e=>{ideaFlt=e.target.value;ideasForm();};
+  d.querySelectorAll('[data-s]').forEach(x=>x.onchange=async()=>{await sb.from('ideas').update({status:x.value}).eq('id',x.dataset.s);ideasForm();});
+  d.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this idea?'))return;await sb.from('ideas').delete().eq('id',b.dataset.d);ideasForm();});
+  d.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{const i=all.find(x=>x.id===b.dataset.m);
+    await sb.from('ideas').update({status:'Planned'}).eq('id',i.id);
+    d.close();postForm({platform:i.platform||undefined,pillar:i.pillar||undefined,caption:i.title+(i.notes?'\n'+i.notes:''),status:'Draft'});});
+  $('#idf').onsubmit=async ev=>{ev.preventDefault();
+    const f=Object.fromEntries(new FormData(ev.target));
+    const w=await sb.from('ideas').insert({client_id:cid,title:f.t.trim(),notes:f.n.trim()||null,pillar:f.p||null,platform:f.pl||null,status:'Idea'});
+    if(w.error) return $('#ie').textContent='Could not save: '+w.error.message;
+    ideaFlt='Idea';ideasForm();};
 }
 const flag=p=>p.approval==='Changes requested'||(!p.caption&&p.status!=='Posted');
 const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
@@ -370,20 +435,26 @@ async function postForm(p={}){
   <div><label>Campaign / promo</label><input name="campaign" value="${esc(p.campaign)}"></div></div>
   <label>Post copy / caption</label><textarea name="caption" rows="4">${esc(p.caption)}</textarea>
   <label>Visual / photo</label><input name="visual" value="${esc(p.visual)}">
-  <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">
+  <label>Hashtags</label><input name="hashtags" value="${esc(p.hashtags)}">${hsets.length?`<select id="hs" style="margin-top:6px"><option value="">Add a saved hashtag set...</option>${hsets.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('')}</select>`:''}
+  <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="repost" style="width:auto" ${p.repost?'checked':''}> Evergreen: can be reposted</label><div id="rpd" style="font-size:13px;color:var(--mute)"></div>
   <h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
   <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div>
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
   <div id="cmx"></div>
   <p class="err" id="pe"></p>
-  <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
+  <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
+  const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
+  $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=updRp;updRp();
+  if($('#hs')) $('#hs').onchange=e=>{const h=hsets.find(x=>x.id===e.target.value);if(h){const i=$('#pf').hashtags;i.value=(i.value.trim()?i.value.trim()+' ':'')+h.tags;}e.target.value='';};
+  if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) showComments(p.id,'#cmx');
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const f=Object.fromEntries(new FormData(e.target));
     f.post_time=f.post_time||null;f.client_id=cid;
     M.forEach(([k])=>{f[k]=(f[k]===''||f[k]==null)?null:+f[k];});
+    f.repost=f.repost==='on';
     if(f.approval!==p.approval&&f.approval==='Pending'){f.approved_by=null;f.approved_on=null;}
     const r=p.id?await sb.from('posts').update(f).eq('id',p.id):await sb.from('posts').insert(f);
     if(r.error) return $('#pe').textContent='Could not save: '+r.error.message;
