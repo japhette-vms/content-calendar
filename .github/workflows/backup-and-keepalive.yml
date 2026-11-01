@@ -10,7 +10,7 @@ jobs:
         env: { URL: '${{ secrets.SUPABASE_URL }}', KEY: '${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}' }
         run: |
           mkdir out
-          for t in clients profiles posts comments key_dates client_settings hashtag_sets ideas activity_log; do
+          for t in clients profiles posts comments key_dates client_settings hashtag_sets ideas activity_log post_history post_media; do
             curl -fsS -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Range-Unit: items" -H "Range: 0-49999" "$URL/rest/v1/$t?select=*" -o "out/$t.json" || echo "skipped $t"
           done
           tar czf backup.tgz out
