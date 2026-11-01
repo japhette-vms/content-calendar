@@ -119,6 +119,11 @@ body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}b
 .s-Internal-review{background:#fff3d6;color:#6a4a00}.s-Client-review{background:#e8e3ff;color:#3a2fb0}
 @media (prefers-color-scheme:dark){.s-Internal-review{background:#4a3a10;color:#ffe3a0}.s-Client-review{background:#2c2760;color:#d4cfff}}
 .cm.done{opacity:.6}
+.upl{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px}
+.upl .um{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.upl .um:first-of-type{border-top:0}
+.upl img{width:44px;height:44px;object-fit:cover;border-radius:8px;background:var(--bg);flex:none}
+.upl .ubig{min-height:48px;width:100%;font-size:16px}
 </style>
 </head>
 <body>
@@ -785,6 +790,7 @@ async function postForm(p={}){
   <div id="resw" style="display:${p.status==='Posted'?'block':'none'}"><h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
   <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div></div>
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
+  <div id="upx"></div>
   <div id="cmx"></div>
   ${p.id?'<details id="hst" style="margin-top:10px"><summary>History</summary><div id="hsb"></div></details>':''}
   <p class="err" id="pe"></p>
@@ -803,6 +809,7 @@ async function postForm(p={}){
   if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) $('#dup').onclick=()=>{d.close();postForm({...p,id:undefined,status:'Draft',approval:'Pending',approved_by:null,approved_on:null,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) showComments(p.id,'#cmx',true);
+  if(p.id) mediaUI('#upx',p,true);
   if(p.id&&$('#hst')) $('#hst').addEventListener('toggle',()=>{if($('#hst').open)showHistory(p.id);});
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const f=Object.fromEntries(new FormData(e.target));
@@ -866,6 +873,51 @@ async function showComments(pid,sel,isAdm){
     if(r.error) return alert('Could not add comment: '+r.error.message);
     showComments(pid,sel,isAdm);};
 }
+const MIME_BY_EXT={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime'};
+const waitMs=ms=>new Promise(r=>setTimeout(r,ms));
+async function mediaUI(sel,p,isAdm){
+  const box=$(sel);if(!box||!p||!p.id)return;
+  const q=await sb.from('post_media').select('*').eq('post_id',p.id).order('created_at',{ascending:false});
+  const rows=q.data||[];
+  const label={processing:'Sending\u2026',done:'Sent \u2713',failed:'Could not send. Please add it again.'};
+  box.innerHTML=`<div class="upl"><h3 style="margin:0 0 6px">Photos &amp; videos</h3>${rows.map(m=>{const img=(m.mime_type||'').startsWith('image/');return `<div class="um">${m.status==='done'&&img&&m.drive_file_id?`<img alt="" src="https://drive.google.com/thumbnail?id=${esc(m.drive_file_id)}&sz=w160">`:`<span style="font-size:26px">${(m.mime_type||'').startsWith('video/')?'\ud83c\udfac':'\ud83d\uddbc\ufe0f'}</span>`}<div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(m.file_name||'').replace(/^\d+_/,''))}</div><small style="color:var(--mute)">${label[m.status]||''}</small></div>${m.status==='done'&&m.drive_link?`<a href="${esc(m.drive_link)}" target="_blank" rel="noopener">Open</a>`:''}${isAdm&&m.status==='done'&&m.drive_link?`<button type="button" class="uv" data-l="${esc(m.drive_link)}" style="min-height:0;padding:4px 10px;font-size:12px">Use as visual</button>`:''}</div>`;}).join('')}
+  <div id="ums" role="status" style="margin:8px 0;color:var(--mute);font-size:13px"></div>
+  <button type="button" class="p ubig" id="umb">\ud83d\udcf7 Add photo or video</button>
+  <input type="file" id="umf" accept="image/*,video/*" multiple hidden>
+  <small style="display:block;margin-top:6px;color:var(--mute)">Up to 50 MB each. Photos and short clips work best.</small></div>`;
+  const msg=t=>{const m=$('#ums');if(m)m.textContent=t;};
+  box.querySelectorAll('.uv').forEach(b=>b.onclick=async()=>{
+    const r=await sb.from('posts').update({visual:b.dataset.l}).eq('id',p.id);
+    if(r.error)return alert('Could not update: '+r.error.message);
+    const f=$('#pf')&&$('#pf').elements.namedItem('visual');if(f)f.value=b.dataset.l;
+    toast('Visual updated.');});
+  $('#umb').onclick=()=>$('#umf').click();
+  $('#umf').onchange=async e=>{
+    const files=[...e.target.files];e.target.value='';if(!files.length)return;
+    $('#umb').disabled=true;
+    for(const f of files){
+      const ext=(f.name.split('.').pop()||'').toLowerCase();const type=f.type||MIME_BY_EXT[ext]||'';
+      if(!Object.values(MIME_BY_EXT).includes(type)){msg('"'+f.name+'" is not a photo or video type we can use.');continue;}
+      if(f.size>52428800){msg('"'+f.name+'" is over 50 MB. Please send a shorter clip.');continue;}
+      const path=p.client_id+'/'+p.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]+/g,'_').slice(0,60);
+      msg('Uploading '+f.name+'\u2026');
+      const u=await sb.storage.from('temp-media').upload(path,f,{contentType:type,upsert:false});
+      if(u.error){msg('Could not upload: '+u.error.message);continue;}
+      msg('Sending '+f.name+'\u2026');
+      let st=null;
+      for(let i=0;i<45&&!st;i++){await waitMs(1500);const r=await sb.from('post_media').select('status').eq('storage_path',path).maybeSingle();if(r.data&&r.data.status!=='processing')st=r.data.status;}
+      msg(st==='done'?'\u2713 '+f.name+' sent.':st==='failed'?f.name+' could not be sent. Please try again.':f.name+' is still being processed. It will show up here shortly.');
+    }
+    if(isAdm){
+      // the upload may have filled the visual / assets-ready; refresh empty form fields so a later Save can't blank them
+      const pr=await sb.from('posts').select('visual,assets_ready').eq('id',p.id).maybeSingle();
+      const fm=$('#pf');if(fm&&pr.data)['visual','assets_ready'].forEach(n=>{const el=fm.elements.namedItem(n);if(el&&!el.value&&pr.data[n])el.value=pr.data[n];});
+      await mediaUI(sel,p,isAdm);
+    }else{
+      const back=idx;await loadPosts();idx=Math.min(back,Math.max(0,posts.length-1));clientView();
+    }
+  };
+}
 async function showHistory(pid){const b=$('#hsb');if(!b)return;b.textContent='Loading\u2026';
   const r=await sb.from('post_history').select('*').eq('post_id',pid).order('changed_at',{ascending:false});
   if(r.error){b.textContent='Could not load history: '+r.error.message;return;}
@@ -911,6 +963,7 @@ function clientView(){
   ${p.post_date&&p.status!=='Posted'?`<p style="text-align:center;color:var(--mute);margin:0 0 8px">Goes live ${esc(rel(p.post_date))} · ${esc(when)}${p.post_time?' at '+esc(t12(p.post_time)):''}</p>`:''}
   ${p.status==='Posted'?'<p style="text-align:center;color:var(--mute);margin:8px 0">This post is already live.</p>':`<div class="row stickybar"><button class="p big" id="ap">Approve</button><button class="bad big" id="rc">Request changes</button></div>`}
   <p style="color:var(--mute)"><span class="badge" style="background:${PILLARS[p.pillar]||'#6b6f85'};color:${ink(PILLARS[p.pillar])}">${esc(p.pillar)}</span> ${esc(p.format)} ${p.hashtags?'· '+esc(p.hashtags):''}</p>
+  ${p.status==='Posted'?'':'<div id="upx"></div>'}
   <div id="cmx" style="margin-top:14px"></div></div>`;
   $('#lv').onclick=()=>{lv=true;clientView();};$('#cvb').onclick=()=>{lv='cal';clientView();};$('#fvb').onclick=()=>{lv='feed';clientView();};
   let x0=null;m.ontouchstart=e=>{x0=e.touches[0].clientX;};
@@ -931,6 +984,7 @@ function clientView(){
     $('#rf').onsubmit=async e=>{e.preventDefault();const rs=[...d.querySelectorAll('[name=r]:checked')].map(x=>x.value),n=$('#rn').value.trim(),body=(rs.length?'['+rs.join(', ')+'] ':'')+n;
       d.close();act('Changes requested',body);};};
   showComments(p.id,'#cmx');
+  if($('#upx')) mediaUI('#upx',p,false);
 }
 async function boot(){
   $('#app').innerHTML='<div role="status" aria-label="Loading your calendar" style="padding:20px"><div class="sk" style="height:56px"></div><div class="sk" style="height:18px;width:60%"></div><div class="sk" style="height:320px"></div><div class="sk" style="height:54px"></div></div>';
