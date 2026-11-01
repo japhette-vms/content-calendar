@@ -9,5 +9,6 @@ jobs:
     steps:
       - name: Query the database
         run: |
-          curl -fsS "https://ognxncsuxhaewpvxrcwi.supabase.co/rest/v1/clients?select=id&limit=1" \
-            -H "apikey: sb_publishable_hxHsGW9la9lXCsK9pnwe6A_ANQjFJ3u"
+          curl -fsS -X POST "https://ognxncsuxhaewpvxrcwi.supabase.co/rest/v1/rpc/ping" \
+            -H "apikey: sb_publishable_hxHsGW9la9lXCsK9pnwe6A_ANQjFJ3u" \
+            -H "Content-Type: application/json" -d '{}'
