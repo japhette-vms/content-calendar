@@ -1815,5 +1815,201 @@ if('serviceWorker' in navigator&&location.protocol==='https:')addEventListener('
 })();
 </script>
 
+<!-- UI UPGRADE 4: pre-flight, recently deleted, find & replace, next-week copy, pillar targets, snippets, hashtag insights, grid planner, UTM, approval sheet, recap, backup, shortcuts, setup checklist -->
+<style>
+.fg button.up{outline:2px dashed var(--acc);outline-offset:-2px}.fg button.up img{opacity:.8}
+.chip>.sb,.bcard>.sb{margin-top:3px}
+#shk .card{max-width:420px;width:100%}#shk .kr{display:flex;justify-content:space-between;gap:16px;padding:6px 0;border-top:1px solid var(--line)}
+#shk kbd{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 8px;font:inherit;font-weight:700}
+</style>
+<script>
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s);
+const isAdm=()=>typeof me!=='undefined'&&me&&me.role==='admin';
+const dAdd=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+const get=(k,def)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?def:v;}catch(e){return def;}};
+const put=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+const dl=(b,n)=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();a.remove();};
+const cname=()=>(clients.find(c=>c.id===cid)||{}).name||'';
+function dlgOpen(html){const d=Q('#dlg');d.innerHTML=html+'<div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>';if(!d.open)d.showModal();Q('#cx').onclick=()=>d.close();return d;}
+const muted=t=>`<p style="color:var(--mute)">${t}</p>`;
+
+/* ---- pre-flight ---- */
+const LIM={Instagram:2200,TikTok:4000,LinkedIn:3000,'Google Business Profile':1500,Facebook:63206};
+function pre(p){const a=[],cap=p.caption||'';
+  if(!cap.trim())a.push('Caption missing');
+  if(!p.visual&&p.format!=='Text Only')a.push('No photo or video');
+  if(!p.post_time)a.push('No time set');
+  if(!p.hashtags&&!/#\S/.test(cap)&&/^(Instagram|TikTok)$/.test(p.platform))a.push('No hashtags');
+  if(LIM[p.platform]&&[...cap].length>LIM[p.platform])a.push('Caption too long for '+p.platform);
+  if(p.platform==='Instagram'&&((cap+' '+(p.hashtags||'')).match(/#\S+/g)||[]).length>30)a.push('Over 30 hashtags');
+  if(!p.pillar)a.push('No content pillar');
+  return a;}
+
+/* ---- recently deleted ---- */
+let cur=null;
+document.addEventListener('click',e=>{if(!e.target.closest('#del')||!cur||!cur.id)return;const k='trash:'+cid,a=get(k,[]).filter(x=>x.p.id!==cur.id);a.unshift({t:Date.now(),p:cur});put(k,a.slice(0,30));},true);
+function trashForm(){const a=get('trash:'+cid,[]);
+  const d=dlgOpen('<h2 style="margin-top:0">Recently deleted</h2>'+(a.map((x,i)=>`<div class="cm"><b>${esc(x.p.post_date||'No date')} · ${esc(x.p.platform||'')}</b><div>${esc((x.p.caption||'(no caption)').slice(0,100))}</div><small>Deleted ${esc(new Date(x.t).toLocaleString())}</small> <button type="button" class="p" data-r="${i}" style="min-height:0;padding:2px 10px">Restore</button></div>`).join('')||muted('Nothing deleted recently. Posts you delete are kept here, in this browser, so you can bring them back.')));
+  d.querySelectorAll('[data-r]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.r,row={...a[i].p};['id','created_at','updated_at'].forEach(k=>delete row[k]);row.client_id=cid;
+    const r=await sb.from('posts').insert(row);if(r.error)return alert('Could not restore: '+r.error.message);
+    a.splice(i,1);put('trash:'+cid,a);d.close();await loadPosts();adminView();toast('Post restored.');});}
+
+/* ---- find and replace ---- */
+function frForm(){
+  const F=['caption','hashtags','campaign','notes'],lab=t=>`<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="${t[0]}" style="width:auto">${t[1]}</label>`;
+  const d=dlgOpen(`<h2 style="margin-top:0">Find and replace</h2><p style="color:var(--mute);margin:0">Searches captions, hashtags, campaign and notes for ${esc(cname())}.</p><label>Find</label><input id="fri"><label>Replace with</label><input id="fro">${lab(['frc','Match case'])}${lab(['frp','Skip posts already Posted'])}<div id="frs" style="margin:10px 0"></div><button type="button" class="p" id="frg" disabled>Replace</button>`);
+  let hits=[];
+  const calc=()=>{const f=Q('#fri').value;hits=[];
+    if(f){const re=new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),Q('#frc').checked?'g':'gi'),rp=Q('#fro').value;
+      posts.forEach(p=>{if(Q('#frp').checked&&p.status==='Posted')return;const u={},old={};F.forEach(k=>{const v=p[k];if(!v)return;const nv=v.replace(re,()=>rp);if(nv!==v){u[k]=nv;old[k]=v;}});if(Object.keys(u).length)hits.push({p,u,old});});}
+    Q('#frs').innerHTML=!f?'':hits.length?`<b>${hits.length}</b> post${hits.length===1?'':'s'} will change.`+hits.slice(0,5).map(h=>`<div class="cm"><small>${esc(h.p.post_date||'')}</small> ${esc(Object.values(h.u)[0].slice(0,100))}</div>`).join(''):'No matches.';
+    Q('#frg').disabled=!hits.length;};
+  ['fri','fro','frc','frp'].forEach(i=>Q('#'+i).oninput=calc);
+  Q('#frg').onclick=async()=>{if(!confirm('Change '+hits.length+' posts?'))return;let bad=null;
+    for(let i=0;i<hits.length&&!bad;i+=8)await Promise.all(hits.slice(i,i+8).map(async h=>{const r=await sb.from('posts').update(h.u).eq('id',h.p.id);if(r.error)bad=r.error;}));
+    const snap=hits.slice();d.close();await loadPosts();adminView();
+    if(bad)return alert('Some posts could not be changed: '+bad.message);
+    toast('Changed '+snap.length+' posts.',async()=>{for(const h of snap)await sb.from('posts').update(h.old).eq('id',h.p.id);await loadPosts();adminView();});};}
+
+/* ---- copy week to next week ---- */
+async function nextWeek(){
+  const a=iso(wkStart),b=iso(dAdd(wkStart,6)),src=posts.filter(p=>p.post_date>=a&&p.post_date<=b);
+  if(!src.length)return alert('This week has no posts.');if(!confirm('Copy '+src.length+' posts to next week as drafts?'))return;
+  const rows=src.map(p=>({client_id:cid,post_date:addDays(p.post_date,7),post_time:p.post_time,platform:p.platform,pillar:p.pillar,format:p.format,caption:p.caption,visual:p.visual,hashtags:p.hashtags,campaign:p.campaign,repost:false,status:'Draft',approval:'Pending'}));
+  const r=await sb.from('posts').insert(rows).select('id');if(r.error)return alert('Could not copy: '+r.error.message);
+  const ids=(r.data||[]).map(x=>x.id);wkStart=dAdd(wkStart,7);await loadPosts();adminView();
+  toast('Copied '+rows.length+' posts to this week.',async()=>{await sb.from('posts').delete().in('id',ids);await loadPosts();adminView();});}
+
+/* ---- caption snippets ---- */
+function snipForm(){const k='snip:'+cid,a=get(k,[]);
+  const d=dlgOpen(`<h2 style="margin-top:0">Caption snippets</h2>${a.map((s,i)=>`<div class="cm"><b>${esc(s.n)}</b><div style="white-space:pre-wrap;color:var(--mute);font-size:13px">${esc(s.t)}</div><button type="button" class="bad" data-x="${i}" style="min-height:0;padding:2px 10px">Delete</button></div>`).join('')||muted('No snippets yet.')}<form id="snf"><label>Name</label><input name="n" required placeholder="e.g. Business hours"><label>Text</label><textarea name="t" rows="3" required></textarea><button class="p" style="margin-top:8px">Add snippet</button></form>${muted('Saved in this browser for '+esc(cname())+'. They appear in the composer under the caption.')}`);
+  d.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{a.splice(+b.dataset.x,1);put(k,a);snipForm();});
+  Q('#snf').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);a.push({n:f.get('n').trim(),t:f.get('t')});put(k,a);snipForm();};}
+
+/* ---- composer extras ---- */
+function ext(p){
+  const f=Q('#pf');if(!f||f.dataset.x4)return;f.dataset.x4='1';p=p||{};
+  const v=n=>(f.elements.namedItem(n)||{}).value||'',snap=()=>({caption:v('caption'),visual:v('visual'),post_time:v('post_time'),hashtags:v('hashtags'),platform:v('platform'),format:v('format'),pillar:v('pillar')});
+  const fr=Q('#pf .fr');
+  if(fr){const pn=document.createElement('div');pn.className='card';pn.style.cssText='padding:10px;margin-top:10px';fr.appendChild(pn);
+    const upd=()=>{const is=pre(snap());pn.innerHTML=is.length?'<b>Needs work</b>'+is.map(i=>`<div style="color:#c2410c;font-size:13px">✗ ${esc(i)}</div>`).join(''):'<b style="color:#177a4e">✓ Ready to send</b>';};
+    f.addEventListener('input',upd);f.addEventListener('change',upd);upd();}
+  f.addEventListener('submit',e=>{const st=v('status');if(!/^(Client review|Approved|Scheduled)$/.test(st))return;const is=pre(snap());
+    if(is.length&&!confirm('This post is not fully ready:\n• '+is.join('\n• ')+'\n\nSave it as '+st+' anyway?')){e.preventDefault();e.stopImmediatePropagation();}},true);
+  const sn=get('snip:'+cid,[]),ta=f.elements.namedItem('caption');
+  if(sn.length&&ta){const s=document.createElement('select');s.style.marginTop='6px';s.setAttribute('aria-label','Insert a saved snippet');
+    s.innerHTML='<option value="">Insert a snippet…</option>'+sn.map((x,i)=>`<option value="${i}">${esc(x.n)}</option>`).join('');
+    s.onchange=()=>{if(s.value==='')return;ta.setRangeText(sn[+s.value].t,ta.selectionStart,ta.selectionEnd,'end');s.value='';ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();};
+    (Q('#ccount')||ta).after(s);}
+  const nt=f.elements.namedItem('notes'),nl=nt&&nt.previousElementSibling;
+  if(nl){const det=document.createElement('details');det.style.marginTop='10px';
+    det.innerHTML=`<summary style="cursor:pointer">Tracking link (UTM)</summary><label>Page address</label><input id="utb" placeholder="https://yourclient.com/offer"><div class="row" style="margin-top:8px"><button type="button" id="utg">Build link</button><button type="button" id="utc">Copy</button></div><label>Tracking link</label><input id="utr" value="${esc(p.tracking_url||'')}"${p.tracking_url?' name="tracking_url"':''}>`;
+    nl.before(det);
+    const SRC={'Google Business Profile':'google'},slug=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    Q('#utg').onclick=()=>{let u;try{u=new URL(Q('#utb').value.trim());}catch(e){return alert('Type the full page address, starting with https://');}
+      const pl=v('platform');u.searchParams.set('utm_source',SRC[pl]||slug(pl));u.searchParams.set('utm_medium','social');u.searchParams.set('utm_campaign',slug(v('campaign')||v('pillar'))||'social');if(v('post_date'))u.searchParams.set('utm_content',v('post_date'));
+      Q('#utr').value=u.toString();Q('#utr').name='tracking_url';};
+    Q('#utc').onclick=()=>{const t=Q('#utr').value;if(t){try{navigator.clipboard.writeText(t);}catch(e){}toast('Copied.');}};}
+}
+const _pf=window.postForm;
+window.postForm=function(p){cur=p||null;const r=_pf.apply(this,arguments);try{ext(p);}catch(e){console.error('ui4',e);}return r;};
+
+/* ---- Insights: pillar targets + hashtags ---- */
+function insY(){
+  const m=Q('main');if(!m||m.querySelector('.insy'))return;
+  const td=iso(new Date()),from=insRange==='30'?addDays(td,-30):insRange==='90'?addDays(td,-90):'',ps=posts.filter(p=>!from||(p.post_date&&p.post_date>=from));
+  const tk='ptarget:'+cid,T=get(tk,{}),keys=Object.keys(PILLARS),cnt={};ps.forEach(p=>{if(p.pillar)cnt[p.pillar]=(cnt[p.pillar]||0)+1;});
+  const tot=Object.values(cnt).reduce((a,b)=>a+b,0);
+  const row=k=>{const act=tot?Math.round((cnt[k]||0)/tot*100):0,t=T[k],has=t!=null&&t!=='';
+    const df=!has?'':act-t>5?'over by '+(act-t)+' pts':t-act>5?'under by '+(t-act)+' pts':'on target';
+    return `<tr><td><span class="pd" style="background:${safeCol(PILLARS[k])}"></span>${esc(k)}</td><td><input type="number" min="0" max="100" data-pt="${esc(k)}" value="${has?t:''}" style="width:80px" aria-label="Target percent for ${esc(k)}"></td><td>${act}%</td><td style="width:34%"><div class="ibar" style="position:relative;overflow:visible"><div style="width:${act}%"></div>${has?`<i style="position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);left:${Math.min(100,t)}%"></i>`:''}</div></td><td>${df}</td></tr>`;};
+  const H={};ps.forEach(p=>{new Set(((p.hashtags||'')+' '+(p.caption||'')).toLowerCase().match(/#[\p{L}\p{N}_]+/gu)||[]).forEach(t=>{const o=H[t]=H[t]||{n:0,r:0,rn:0};o.n++;if(p.reach!=null){o.r+=p.reach;o.rn++;}});});
+  const ha=Object.entries(H),use=ha.slice().sort((a,b)=>b[1].n-a[1].n).slice(0,10),rch=ha.filter(([,o])=>o.rn>=2).sort((a,b)=>b[1].r/b[1].rn-a[1].r/a[1].rn).slice(0,5);
+  const ht=(arr,c3)=>arr.length?`<div class="tw"><table class="lt"><thead><tr><th>Hashtag</th><th>Posts</th><th>${c3}</th></tr></thead><tbody>${arr.map(([t,o])=>`<tr><td>${esc(t)}</td><td>${o.n}</td><td>${o.rn?Math.round(o.r/o.rn).toLocaleString():'–'}</td></tr>`).join('')}</tbody></table></div>`:muted('Not enough data yet.');
+  const h=`<div class="insy"><h3>Pillar targets</h3><div class="tw"><table class="lt"><thead><tr><th>Pillar</th><th>Target %</th><th>Actual</th><th></th><th></th></tr></thead><tbody>${keys.map(row).join('')}</tbody></table></div><p style="color:var(--mute);font-size:13px;margin:4px 0">Targets are saved in this browser. Actual share uses the period chosen above.</p>
+  <h3>Hashtags</h3><div class="g2"><div><b>Most used</b>${ht(use,'Avg reach')}</div><div><b>Best average reach</b> <small style="color:var(--mute)">(2+ posts with results)</small>${ht(rch,'Avg reach')}</div></div></div>`;
+  const x=m.querySelector('.insx'),t=[...m.querySelectorAll('h3')].find(e=>/Top posts/.test(e.textContent));
+  x?x.insertAdjacentHTML('afterend',h):t?t.insertAdjacentHTML('beforebegin',h):m.insertAdjacentHTML('beforeend',h);
+  m.querySelectorAll('[data-pt]').forEach(i=>i.onchange=()=>{T[i.dataset.pt]=i.value===''?null:+i.value;put(tk,T);m.querySelector('.insy').remove();insY();});}
+const _ins=window.insightsView;
+window.insightsView=function(){const r=_ins.apply(this,arguments);try{insY();}catch(e){console.error('ui4',e);}return r;};
+
+/* ---- Instagram grid planner ---- */
+let igF='all';
+function igx(){const fg=Q('.fg');if(!fg||Q('#igf'))return;
+  fg.insertAdjacentHTML('beforebegin',`<div class="row noprint" id="igf" style="justify-content:center;margin:10px 0"><div class="seg">${[['all','All'],['up','Upcoming'],['live','Posted']].map(([v,l])=>`<button type="button" data-f="${v}" class="${igF===v?'on':''}">${l}</button>`).join('')}</div><span style="color:var(--mute);font-size:13px">Dashed tiles are planned posts; solid tiles are already posted.</span></div>`);
+  const apply=()=>fg.querySelectorAll('button[data-id]').forEach(b=>{const p=posts.find(x=>x.id===b.dataset.id)||{},up=p.status!=='Posted';b.classList.toggle('up',up);
+    if(!b.dataset.t){b.dataset.t='1';const s=b.querySelector('span');if(s)s.textContent+=up?' · Planned':' · Posted';}
+    b.style.display=(igF==='up'&&!up)||(igF==='live'&&up)?'none':'';});
+  Q('#igf').onclick=e=>{const b=e.target.closest('button[data-f]');if(!b)return;igF=b.dataset.f;Q('#igf').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));apply();};apply();}
+const _fv=window.feedView;
+window.feedView=function(){const r=_fv.apply(this,arguments);try{igx();}catch(e){console.error('ui4',e);}return r;};
+
+/* ---- approval sheet, recap, backup, shortcuts ---- */
+const mPosts=()=>{const y=month.getFullYear(),mo=month.getMonth();return posts.filter(p=>inMonth(p,y,mo)).sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||'')));};
+const mTitle=()=>month.toLocaleString('en',{month:'long',year:'numeric'});
+function sheet(){
+  const ps=mPosts();if(!ps.length)return alert('No posts in '+mTitle()+'. Use the month view first.');
+  const w=window.open('','_blank');if(!w)return alert('Allow pop-ups for this site to open the print page.');
+  const css='body{font:14px system-ui,sans-serif;margin:24px;color:#1d2030}h1{margin:0 0 4px}.g{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.c{border:1px solid #ccc;border-radius:10px;padding:12px;break-inside:avoid}.c img{width:100%;max-height:220px;object-fit:cover;border-radius:6px}.m{color:#666;font-size:12px}.b{margin-top:8px;font-size:13px}';
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(cname())} ${esc(mTitle())} approval sheet</title><style>${css}</style><h1>${esc(cname())}: ${esc(mTitle())}</h1><div class="m">Content for approval · prepared ${esc(new Date().toLocaleDateString('en',{day:'numeric',month:'long',year:'numeric'}))}</div><div class="g">${ps.map(p=>{const t=thumbUrl(p.visual,'w500');return `<div class="c">${t?`<img src="${t}" alt="">`:''}<div class="m"><b>${esc(p.post_date)}${p.post_time?' · '+esc(p.post_time.slice(0,5)):''}</b> · ${esc(p.platform)} · ${esc(p.pillar||'')}</div><div style="white-space:pre-wrap;margin-top:6px">${esc(p.caption||'(no caption yet)')}</div>${p.hashtags?`<div class="m">${esc(p.hashtags)}</div>`:''}<div class="b">☐ Approved &nbsp;&nbsp; ☐ Changes: ______________________</div></div>`;}).join('')}</div>`);
+  w.document.close();setTimeout(()=>w.print(),900);}
+function recap(){
+  const ps=mPosts(),cn=s=>ps.filter(p=>p.status===s).length,tot=k=>ps.reduce((a,p)=>a+(+p[k]||0),0);
+  const pl=PLATFORMS.map(x=>[x,ps.filter(p=>p.platform===x).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(', ')||'none yet';
+  const pil=Object.keys(PILLARS).map(k=>[k,ps.filter(p=>p.pillar===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+Math.round(x[1]/ps.length*100)+'%').join(', ');
+  const res=M.filter(([k])=>tot(k)>0).map(([k,l])=>l.toLowerCase()+' '+tot(k).toLocaleString()).join(', ');
+  const top=ps.filter(p=>p.reach!=null).sort((a,b)=>b.reach-a.reach)[0];
+  const L=[`Hi! Here is your social media recap for ${mTitle()}.`,'',`• Posts: ${ps.length} planned, ${cn('Posted')} published, ${cn('Scheduled')} scheduled`,`• By platform: ${pl}`];
+  if(pil)L.push(`• Content mix: ${pil}`);if(res)L.push(`• Results so far: ${res}`);
+  if(top)L.push(`• Top post: ${top.platform}, ${top.post_date} (${top.reach.toLocaleString()} reach) — "${(top.caption||'').replace(/\s+/g,' ').slice(0,80)}"`);
+  L.push('','Let me know if you have any questions or would like to change anything for next month.');
+  const d=dlgOpen(`<h2 style="margin-top:0">Monthly recap · ${esc(mTitle())}</h2><textarea id="rct" rows="12">${esc(L.join('\n'))}</textarea><div class="row" style="margin-top:8px"><button type="button" class="p" id="rcc">Copy</button></div>${muted('Edit the text before you send it. Change the month in the calendar view first.')}`);
+  Q('#rcc').onclick=()=>{try{navigator.clipboard.writeText(Q('#rct').value);}catch(e){Q('#rct').select();document.execCommand('copy');}toast('Copied.');};}
+async function backupForm(){
+  const d=dlgOpen('<h2 style="margin-top:0">Full backup</h2><div id="bkm">Loading every client’s posts…</div>');
+  try{const all=await fetchAll('posts','*'),cs=await fetchAll('clients','*'),nm=id=>(cs.find(c=>c.id===id)||{}).name||id,st=iso(new Date());
+    Q('#bkm').innerHTML=`<p>${all.length} posts across ${cs.length} clients.</p><div class="row"><button type="button" class="p" id="bj">Download JSON (complete)</button><button type="button" id="bcv">Download CSV (spreadsheet)</button></div>${muted('Comments and settings are not included. Use the Supabase export for those.')}`;
+    Q('#bj').onclick=()=>dl(new Blob([JSON.stringify({exported:new Date().toISOString(),clients:cs,posts:all},null,1)],{type:'application/json'}),'content-calendar-backup-'+st+'.json');
+    Q('#bcv').onclick=()=>{const cols=[...new Set(all.flatMap(p=>Object.keys(p)))],q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+      dl(new Blob(['\ufeff'+['client',...cols].map(q).join(',')+'\r\n'+all.map(p=>[nm(p.client_id),...cols.map(c=>p[c])].map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),'content-calendar-backup-'+st+'.csv');};
+  }catch(e){Q('#bkm').innerHTML='<span class="err">Could not load: '+esc(e.message||String(e))+'</span>';}}
+function help(){
+  if(Q('#shk'))return;const o=document.createElement('div');o.id='shk';o.className='tov';
+  const A=isAdm()?[['Ctrl+K','Search everything'],['N','New post'],['T','Today'],['← →','Previous / next'],['1 – 5','Calendar, Week, List, Board, Feed'],['?','This list']]:[['← →','Previous / next post'],['Ctrl+K','Search posts'],['?','This list']];
+  o.innerHTML=`<div class="card" role="dialog" aria-label="Keyboard shortcuts"><h2 style="margin:0 0 8px">Keyboard shortcuts</h2>${A.map(([k,t])=>`<div class="kr"><span>${t}</span><kbd>${k}</kbd></div>`).join('')}<div class="row" style="margin-top:12px"><button type="button" id="shx" class="p">Close</button></div></div>`;
+  document.body.appendChild(o);const x=()=>{o.remove();document.removeEventListener('keydown',k,true);},k=e=>{if(e.key==='Escape')x();};
+  document.addEventListener('keydown',k,true);Q('#shx').onclick=x;o.onclick=e=>{if(e.target===o)x();};Q('#shx').focus();}
+document.addEventListener('keydown',e=>{if(e.key!=='?'||e.ctrlKey||e.metaKey||e.altKey)return;const t=e.target;
+  if(/INPUT|TEXTAREA|SELECT/.test(t.tagName)||t.isContentEditable||Q('#dlg').open||Q('#kov'))return;e.preventDefault();e.stopPropagation();help();},true);
+
+/* ---- Tools menu additions ---- */
+const _tf=window.toolsForm;
+window.toolsForm=function(){const r=_tf.apply(this,arguments);try{const g=Q('#t1')&&Q('#t1').parentElement;if(g)[['Find and replace',frForm],['Recently deleted',trashForm],['Caption snippets',snipForm],['Monthly recap',recap],['Approval sheet (print)',sheet],['Full backup',backupForm],['Keyboard shortcuts',()=>{Q('#dlg').close();help();}]].forEach(([t,fn])=>{const b=document.createElement('button');b.type='button';b.textContent=t;b.onclick=fn;g.appendChild(b);});}catch(e){console.error('ui4',e);}return r;};
+
+/* ---- setup checklist + badges ---- */
+function setup(){
+  const sr=Q('.sumrow');if(!sr||Q('#setup')||get('setup:'+cid,0)===1||posts.length>=8)return;
+  const it=[['Brand colour or logo added',!!(BRAND||LOGO),'Settings',()=>settingsForm()],['Weekly goals set',JSON.stringify(GOALS)!==JSON.stringify(DEF_G),'Settings',()=>settingsForm()],['Content pillars customised',JSON.stringify(Object.entries(PILLARS))!==JSON.stringify(Object.entries(DEF_P)),'Settings',()=>settingsForm()],['Key dates added',keyDates.length>0,'Settings',()=>settingsForm()],['Hashtag set saved',hsets.length>0,'Hashtag sets',()=>hashtagForm()],['First posts added',posts.length>0,'New post',()=>postForm()]];
+  if(it.every(x=>x[1]))return;
+  sr.insertAdjacentHTML('beforebegin',`<div class="card" id="setup" style="padding:12px;margin:10px 0"><div class="row"><b>Set up this client</b><button type="button" id="sux" style="margin-left:auto;min-height:0;padding:2px 10px">Hide</button></div>${it.map(([t,ok,b],i)=>`<div class="row" style="margin-top:6px"><span style="color:${ok?'#177a4e':'var(--mute)'}">${ok?'✓':'○'}</span><span style="flex:1;${ok?'text-decoration:line-through;color:var(--mute)':''}">${t}</span>${ok?'':`<button type="button" class="gbtn" data-su="${i}">${b}</button>`}</div>`).join('')}</div>`);
+  Q('#sux').onclick=()=>{put('setup:'+cid,1);Q('#setup').remove();};
+  document.querySelectorAll('[data-su]').forEach(b=>b.onclick=()=>it[+b.dataset.su][3]());}
+function enh(){
+  if(!isAdm())return;
+  document.querySelectorAll('.chip[data-id]:not([data-pf]),.bcard[data-id]:not([data-pf])').forEach(c=>{c.dataset.pf='1';const p=posts.find(x=>x.id===c.dataset.id);if(!p||p.status==='Posted')return;
+    const is=pre(p),s=document.createElement('span');s.className='sb '+(is.length?'b-Changes':'b-Approved');s.textContent=is.length?'Needs work · '+is.length:'✓ Ready';s.title=is.join(', ');c.appendChild(s);});
+  if(Q('.wg')&&!Q('#cwn')){const a=Q('#cpw')||Q('#tdy')||Q('#nw');if(a){const b=document.createElement('button');b.type='button';b.id='cwn';b.textContent='➜ Copy to next week';b.onclick=nextWeek;a.after(b);}}
+  setup();
+  const k='trash:'+cid,a=get(k,[]);if(a.length&&posts.length){const b=a.filter(x=>!posts.some(q=>q.id===x.p.id));if(b.length!==a.length)put(k,b);}
+}
+let raf=0;
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(enh);}).observe(Q('#app'),{childList:true,subtree:true});
+enh();
+})();
+</script>
+
 </body>
 </html>
