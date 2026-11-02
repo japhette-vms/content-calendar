@@ -491,6 +491,7 @@ function toolsForm(){
   <div style="display:grid;gap:8px">
   <button type="button" id="t1">Add a client</button>
   <button type="button" id="t2">Import posts from Excel</button>
+  <button type="button" id="t8">Import results from Meta</button>
   <button type="button" id="t6">Export posts to CSV</button>
   <button type="button" id="t4">Ideas Bank</button>
   <button type="button" id="t5">Hashtag sets</button>
@@ -499,7 +500,7 @@ function toolsForm(){
   <div class="row" style="margin-top:14px"><button type="button" id="cx">Close</button></div>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
-  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t3').onclick=()=>helpForm(true);$('#t4').onclick=ideasForm;$('#t6').onclick=()=>{d.close();exportCsv();};$('#t7').onclick=pwForm;$('#t5').onclick=hashtagForm;
+  $('#t1').onclick=addClientForm;$('#t2').onclick=importForm;$('#t8').onclick=importResultsForm;$('#t3').onclick=()=>helpForm(true);$('#t4').onclick=ideasForm;$('#t6').onclick=()=>{d.close();exportCsv();};$('#t7').onclick=pwForm;$('#t5').onclick=hashtagForm;
 }
 function addClientForm(){
   const d=$('#dlg');
@@ -584,6 +585,119 @@ function importForm(){
     d.close();await loadPosts();vw='month';adminView();alert('Imported '+found.posts.length+' posts.');
   };
 }
+/* ---------- Tools: import results from a Meta Business Suite export ---------- */
+/*META-START*/
+function parseCsv(t){
+  t=String(t||'').replace(/^﻿/,'');
+  const rows=[];let r=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;}
+    else if(c==='"')q=true;
+    else if(c===','){r.push(f);f='';}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;r.push(f);f='';if(r.some(x=>x!==''))rows.push(r);r=[];}
+    else f+=c;}
+  r.push(f);if(r.some(x=>x!==''))rows.push(r);
+  return rows;}
+function metaDate(s){
+  s=String(s||'').trim();let m;
+  if((m=s.match(/^(\d{4})-(\d{2})-(\d{2})/)))return m[1]+'-'+m[2]+'-'+m[3];
+  if((m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))){let mo=+m[1],dd=+m[2];if(mo>12&&dd<=12){const x=mo;mo=dd;dd=x;}
+    return m[3]+'-'+String(mo).padStart(2,'0')+'-'+String(dd).padStart(2,'0');}
+  return null;}
+const mnorm=s=>String(s||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
+const mnum=v=>{if(v==null)return null;const t=String(v).replace(/,/g,'').trim();if(t==='')return null;const n=Number(t);return isFinite(n)?Math.round(n):null;};
+function metaRows(text){
+  const rows=parseCsv(text);if(rows.length<2)throw new Error('That file looks empty.');
+  const H=rows[0].map(h=>String(h).trim().toLowerCase());
+  const col=(...names)=>{for(const n of names){const i=H.indexOf(n);if(i>=0)return i;}return -1;};
+  const c={page:col('page name','account name','username'),title:col('title'),desc:col('description'),time:col('publish time','publish date','date published'),link:col('permalink','post link'),reach:col('reach'),likes:col('reactions','likes'),com:col('comments'),sh:col('shares'),sv:col('saves'),lc:col('link clicks'),eng:col('reactions, comments and shares','engagements')};
+  if(c.time<0||c.reach<0)throw new Error('This does not look like a Meta Business Suite posts export (it needs "Publish time" and "Reach" columns).');
+  const g=(r,i)=>i>=0?r[i]:null;
+  const out=[];
+  rows.slice(1).forEach(r=>{
+    const date=metaDate(g(r,c.time));if(!date)return;
+    const cap=String(g(r,c.title)||g(r,c.desc)||'').trim();
+    const link=String(g(r,c.link)||'').trim();
+    const pl=/facebook\.com/i.test(link)?'Facebook':/instagram\.com/i.test(link)?'Instagram':/tiktok\.com/i.test(link)?'TikTok':/linkedin\.com/i.test(link)?'LinkedIn':null;
+    const likes=mnum(g(r,c.likes)),com=mnum(g(r,c.com)),sh=mnum(g(r,c.sh)),sv=mnum(g(r,c.sv));
+    const ss=(sh!=null||sv!=null)?(sh||0)+(sv||0):null;
+    let eng=mnum(g(r,c.eng));if(eng==null&&(likes!=null||com!=null||ss!=null))eng=(likes||0)+(com||0)+(ss||0);
+    out.push({page:String(g(r,c.page)||'').trim(),cap,date,link,platform:pl,reach:mnum(g(r,c.reach)),likes,comments_count:com,shares_saves:ss,link_clicks:mnum(g(r,c.lc)),engagements:eng});
+  });
+  return out;}
+function matchMeta(rows,posts,page){
+  const ps=posts.filter(p=>p.caption&&p.post_date).map(p=>({p,n:mnorm(p.caption)})).filter(x=>x.n.length>=12);
+  const used=new Set(),matched=[],unmatched=[];
+  const days=(a,b)=>Math.abs((new Date(a+'T00:00:00Z')-new Date(b+'T00:00:00Z'))/864e5);
+  rows.filter(r=>!page||r.page===page).forEach(r=>{
+    const nr=mnorm(r.cap);let best=null,bd=99;
+    if(nr.length>=12)ps.forEach(({p,n})=>{
+      if(used.has(p.id))return;
+      if(r.platform&&p.platform!==r.platform)return;
+      const L=Math.min(n.length,nr.length,40);
+      if(n.slice(0,L)!==nr.slice(0,L))return;
+      const d=days(r.date,p.post_date);
+      if(d<=3&&d<bd){best=p;bd=d;}});
+    if(best){used.add(best.id);matched.push({r,p:best});}else unmatched.push(r);
+  });
+  return {matched,unmatched};}
+/*META-END*/
+function importResultsForm(){
+  const d=$('#dlg');const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  if(!cid){alert('Add a client first.');return;}
+  d.innerHTML=`<h2 style="margin-top:0">Import results from Meta</h2>
+  <p>Results are added to the matching posts of <b>${esc(cname)}</b>. In Meta Business Suite, export your post Insights as a CSV and choose the file here. Posts are matched by caption and date. Nothing is created or deleted, and you see a preview first.</p>
+  <input type="file" id="mf" accept=".csv,text/csv"><div id="mo" style="margin:12px 0"></div>
+  <div class="row"><button type="button" class="p" id="mgo" style="display:none">Save results</button><button type="button" id="cx">Close</button></div>`;
+  d.showModal();
+  $('#cx').onclick=()=>d.close();
+  let rows=null,res=null,pages=[];
+  const show=page=>{
+    res=matchMeta(rows,posts,page);
+    const tot=res.matched.length+res.unmatched.length,N=v=>v==null?'–':v;
+    $('#mo').innerHTML=(pages.length>1?`<label>Which Page's rows?</label><select id="mpg">${pages.map(x=>`<option value="${esc(x)}"${x===page?' selected':''}>${esc(x)} (${rows.filter(r=>r.page===x).length} rows)</option>`).join('')}</select>`:'')
+      +`<p><b>${res.matched.length}</b> of ${tot} rows matched a post.</p>`
+      +(res.matched.length?`<div class="tw"><table class="lt"><thead><tr><th>Post</th><th>Reach</th><th>Reactions</th><th>Comments</th><th>Shares</th></tr></thead><tbody>${res.matched.slice(0,12).map(({r,p})=>`<tr><td>${esc(p.post_date)} · ${esc(p.platform)}<br><small>${esc((p.caption||'').slice(0,40))}</small></td><td>${N(r.reach)}</td><td>${N(r.likes)}</td><td>${N(r.comments_count)}</td><td>${N(r.shares_saves)}</td></tr>`).join('')}</tbody></table></div>${res.matched.length>12?`<small>and ${res.matched.length-12} more</small>`:''}`:'')
+      +(res.unmatched.length?`<details style="margin-top:8px"><summary>${res.unmatched.length} row(s) not matched</summary>${res.unmatched.slice(0,15).map(r=>`<div class="cm"><small>${esc(r.date)} · ${esc((r.cap||'(no caption)').slice(0,60))}</small></div>`).join('')}${res.unmatched.length>15?'<small>and more</small>':''}<p style="font-size:12px;color:var(--mute)">Unmatched rows are usually posts that are not in this calendar, or whose caption was changed after posting.</p></details>`:'')
+      +(res.matched.length?`<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="mpost" style="width:auto" checked> Also mark matched posts as Posted</label>`:'');
+    if($('#mpg'))$('#mpg').onchange=e=>show(e.target.value);
+    $('#mgo').style.display=res.matched.length?'':'none';
+    $('#mgo').disabled=false;
+    $('#mgo').textContent='Save results to '+res.matched.length+' post'+(res.matched.length===1?'':'s');
+  };
+  $('#mf').onchange=async ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    $('#mo').textContent='Reading the file...';$('#mgo').style.display='none';
+    try{
+      rows=metaRows(await f.text());
+      if(!rows.length){$('#mo').innerHTML='<span class="err">No posts with a publish date were found in that file.</span>';return;}
+      pages=[...new Set(rows.map(r=>r.page))].filter(Boolean);
+      let first='';
+      if(pages.length>1)first=pages.map(x=>[x,matchMeta(rows,posts,x).matched.length]).sort((a,b)=>b[1]-a[1])[0][0];
+      else if(pages.length===1)first=pages[0];
+      show(first);
+    }catch(err){$('#mo').innerHTML='<span class="err">'+esc(err.message)+'</span>';}
+  };
+  $('#mgo').onclick=async()=>{
+    if(!res||!res.matched.length)return;
+    const mk=$('#mpost')&&$('#mpost').checked;
+    $('#mgo').disabled=true;
+    let ok=0,bad=0,firstErr='';
+    for(let i=0;i<res.matched.length;i+=8){
+      await Promise.all(res.matched.slice(i,i+8).map(async({r,p})=>{
+        const u={};
+        ['reach','likes','comments_count','shares_saves','link_clicks','engagements'].forEach(k=>{if(r[k]!=null)u[k]=r[k];});
+        if(r.link&&!p.live_link)u.live_link=r.link;
+        if(mk&&p.status!=='Posted')u.status='Posted';
+        if(!Object.keys(u).length)return;
+        const q=await sb.from('posts').update(u).eq('id',p.id);
+        if(q.error){bad++;firstErr=firstErr||q.error.message;}else ok++;}));
+    }
+    await loadPosts();
+    if(bad){$('#mo').innerHTML='<span class="err">'+ok+' updated, '+bad+' failed: '+esc(firstErr)+'</span>';$('#mgo').style.display='none';return;}
+    d.close();adminView();alert('Results saved to '+ok+' post'+(ok===1?'':'s')+'.');
+  };
+}
 function helpForm(admin){
   const d=$('#dlg');const isA=admin||(me&&me.role==='admin');
   d.innerHTML=isA?`<h2 style="margin-top:0">Help guide</h2>
@@ -598,7 +712,7 @@ function helpForm(admin){
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
-  <h3>Tools</h3><ul><li><b>Add a client</b>: type their name and email. They are emailed an invite to choose their own password.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li><li><b>Export posts to CSV</b>: downloads the selected client's posts as a spreadsheet backup. <b>Change my password</b> is here too.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
+  <h3>Tools</h3><ul><li><b>Add a client</b>: type their name and email. They are emailed an invite to choose their own password.</li><li><b>Import posts from Excel</b>: choose the workbook; the Posts sheet is read.</li><li><b>Import results from Meta</b>: in Meta Business Suite export your post Insights as a CSV, then choose the file. Posts are matched by caption and date, and Reach, Reactions, Comments and Shares are filled in. You see a preview before anything is saved.</li><li><b>Ideas Bank</b>: keep post ideas, then click Make post to turn one into a draft.</li><li><b>Hashtag sets</b>: save groups of hashtags, then add them to a post with one click.</li><li><b>Export posts to CSV</b>: downloads the selected client's posts as a spreadsheet backup. <b>Change my password</b> is here too.</li></ul><h3>Reposting</h3><p>Tick <b>Evergreen: can be reposted</b> on a post. Once it has been posted and the repost gap (set in Settings) has passed, it appears under <b>Ready to repost</b> on the month screen. Open it and click <b>Repost this</b> to make a new draft.</p>
   <h3>Good to know</h3><ul><li>Take a backup now and then: Supabase, Table Editor, export to CSV.</li><li>If the page looks old after an update, press Ctrl+Shift+R.</li></ul>`
   :`<h2 style="margin-top:0">How to use this calendar</h2>
   <ul><li>You see your planned posts one at a time. Use <b>Previous</b> and <b>Next</b> to move through them.</li>
