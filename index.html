@@ -124,6 +124,14 @@ body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}b
 .upl .um:first-of-type{border-top:0}
 .upl img{width:44px;height:44px;object-fit:cover;border-radius:8px;background:var(--bg);flex:none}
 .upl .ubig{min-height:48px;width:100%;font-size:16px}
+.ubar{display:none;height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0}.ubar.on{display:block}.ubar>div{height:100%;width:40%;background:var(--acc);border-radius:4px;animation:ub 1.1s infinite ease-in-out}@keyframes ub{0%{margin-left:-40%}100%{margin-left:100%}}
+@media(prefers-reduced-motion:reduce){.ubar>div{animation:none;width:100%;opacity:.5}}
+.ibar{height:8px;background:var(--line);border-radius:5px;overflow:hidden}.ibar>div{height:100%;background:var(--brand,var(--acc));border-radius:5px}
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}.mc{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mc .mt{aspect-ratio:4/3;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:34px}.mc .mt img{width:100%;height:100%;object-fit:cover;display:block}
+.mc .mi2{padding:8px 10px;font-size:13px}.mc .mn{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mc small{color:var(--mute)}
+.bkb{background:var(--card);border:1px solid var(--acc);border-radius:10px;padding:8px 12px;margin-bottom:8px}
+@media(max-width:640px){.mg{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -221,7 +229,7 @@ async function loadPosts(){
 const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:42px;max-width:140px;object-fit:contain;margin-right:10px">`:''}<span>${esc(CNAME)||'Content Calendar'}<small class="sub">Social media calendar</small></span>`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
   $('#out').onclick=async()=>{await sb.auth.signOut();me=null;applyBrand();loginView();};
-  if(me&&me.role==='admin'){const ids=['allb','rpb','yrb','icb','st','pr'].map(i=>document.getElementById(i)).filter(Boolean);
+  if(me&&me.role==='admin'){const ids=['allb','rpb','insb','mlb','yrb','icb','st','pr'].map(i=>document.getElementById(i)).filter(Boolean);
     if(ids.length){const dt=document.createElement('details');dt.className='menu';dt.innerHTML='<summary>More</summary><div class="mi"></div>';ids.forEach(b=>dt.lastChild.appendChild(b));document.querySelector('header').insertBefore(dt,document.getElementById('tl'));}}
   if($('#tl')) $('#tl').onclick=toolsForm;
   if($('#hp')) $('#hp').onclick=()=>helpForm();
@@ -307,17 +315,37 @@ function bindLegend(){document.querySelectorAll('.lg').forEach(b=>b.onclick=()=>
 const miniHead=()=>head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button class="p" id="np">New post</button>`);
 function miniBind(re){bindOut();bindVB();$('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();re();};$('#np').onclick=()=>postForm();}
 let ls={k:'post_date',d:1,q:'',pf:'',st:'',ap:'',pi:''};
+let selIds=new Set(),curRows=[];
 function tableView(){
   const cols=[['post_date','Date'],['post_time','Time'],['platform','Platform'],['pillar','Pillar'],['format','Format'],['status','Status'],['approval','Client'],['caption','Caption']];
   const sel=(id,arr,v,lab)=>`<select id="${id}" style="width:auto" aria-label="${lab}"><option value="">${lab}</option>${arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
-  $('#app').innerHTML=miniHead()+`<main>${viewbar('list')}<div class="row noprint" style="margin-bottom:10px"><input id="lq" placeholder="Search captions" value="${esc(ls.q)}" style="flex:1;min-width:160px" aria-label="Search captions">${sel('lpf',PLATFORMS,ls.pf,'All platforms')}${sel('lpi',Object.keys(PILLARS),ls.pi,'All pillars')}${sel('lst',stList(),ls.st,'All statuses')}${sel('lap',APPR,ls.ap,'All approvals')}</div><div id="lc" style="color:var(--mute);margin:4px 0"></div><div class="tw"><table class="lt"><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" aria-sort="${ls.k===k?(ls.d>0?'ascending':'descending'):'none'}">${l}${ls.k===k?(ls.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody id="lb"></tbody></table></div></main>`;
+  $('#app').innerHTML=miniHead()+`<main>${viewbar('list')}<div class="row noprint" style="margin-bottom:10px"><input id="lq" placeholder="Search captions" value="${esc(ls.q)}" style="flex:1;min-width:160px" aria-label="Search captions">${sel('lpf',PLATFORMS,ls.pf,'All platforms')}${sel('lpi',Object.keys(PILLARS),ls.pi,'All pillars')}${sel('lst',stList(),ls.st,'All statuses')}${sel('lap',APPR,ls.ap,'All approvals')}</div><div id="lc" style="color:var(--mute);margin:4px 0"></div><div id="bk2" class="bkb row noprint" style="display:none"><b id="bkn"></b><select id="bks" style="width:auto" aria-label="New status">${stList().map(x=>`<option>${esc(x)}</option>`).join('')}</select><button type="button" class="p" id="bka">Set status</button><button type="button" id="bkc">Clear selection</button></div><div class="tw"><table class="lt"><thead><tr><th style="width:34px"><input type="checkbox" id="lsa" aria-label="Select all shown posts" style="width:auto;min-height:0"></th>${cols.map(([k,l])=>`<th data-k="${k}" aria-sort="${ls.k===k?(ls.d>0?'ascending':'descending'):'none'}">${l}${ls.k===k?(ls.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody id="lb"></tbody></table></div></main>`;
   miniBind(tableView);
   const draw=()=>{const q=ls.q.toLowerCase();
     const rows=posts.filter(p=>(!ls.pf||p.platform===ls.pf)&&(!ls.pi||p.pillar===ls.pi)&&(!ls.st||p.status===ls.st)&&(!ls.ap||p.approval===ls.ap)&&(!q||((p.caption||'')+' '+(p.hashtags||'')).toLowerCase().includes(q)))
       .sort((a,b)=>String(a[ls.k]||'~').localeCompare(String(b[ls.k]||'~'))*ls.d||String(a.post_date).localeCompare(String(b.post_date)));
-    $('#lc').textContent=rows.length+' of '+posts.length+' posts';
-    $('#lb').innerHTML=rows.map(p=>`<tr class="r" data-id="${p.id}" tabindex="0"><td>${esc(p.post_date||'')}</td><td>${esc((p.post_time||'').slice(0,5))}</td><td>${picon(p.platform)}${esc(p.platform)}</td><td><span class="pd" style="background:${safeCol(PILLARS[p.pillar])}"></span>${esc(p.pillar||'')}</td><td>${esc(p.format||'')}</td><td>${sbadge({...p,approval:null,caption:'x'})}</td><td>${apBadge(p)}</td><td>${p.caption?esc(p.caption.slice(0,90)):'<span class="sb b-Changes">No caption</span>'}</td></tr>`).join('')||'<tr><td colspan="8" style="color:var(--mute);padding:16px">No posts match these filters.</td></tr>';
-    document.querySelectorAll('tr.r').forEach(r=>{const o=()=>postForm(posts.find(p=>p.id===r.dataset.id));r.onclick=o;r.onkeydown=e=>{if(e.key==='Enter')o();};});};
+    $('#lc').textContent=rows.length+' of '+posts.length+' posts';curRows=rows;
+    $('#lb').innerHTML=rows.map(p=>`<tr class="r" data-id="${p.id}" tabindex="0"><td><input type="checkbox" class="rk" data-id="${p.id}"${selIds.has(p.id)?' checked':''} aria-label="Select this post" style="width:auto;min-height:0"></td><td>${esc(p.post_date||'')}</td><td>${esc((p.post_time||'').slice(0,5))}</td><td>${picon(p.platform)}${esc(p.platform)}</td><td><span class="pd" style="background:${safeCol(PILLARS[p.pillar])}"></span>${esc(p.pillar||'')}</td><td>${esc(p.format||'')}</td><td>${sbadge({...p,approval:null,caption:'x'})}</td><td>${apBadge(p)}</td><td>${p.caption?esc(p.caption.slice(0,90)):'<span class="sb b-Changes">No caption</span>'}</td></tr>`).join('')||'<tr><td colspan="9" style="color:var(--mute);padding:16px">No posts match these filters.</td></tr>';
+    document.querySelectorAll('tr.r').forEach(r=>{const o=()=>postForm(posts.find(p=>p.id===r.dataset.id));r.onclick=o;r.onkeydown=e=>{if(e.key==='Enter'&&e.target===r)o();};});
+    document.querySelectorAll('.rk').forEach(c=>{c.onclick=e=>{e.stopPropagation();if(c.checked)selIds.add(c.dataset.id);else selIds.delete(c.dataset.id);upBar();};});
+    upBar();};
+  selIds=new Set([...selIds].filter(id=>posts.some(p=>p.id===id)));
+  const upBar=()=>{const n=selIds.size;$('#bk2').style.display=n?'flex':'none';$('#bkn').textContent=n+' selected';
+    const all=$('#lsa');if(all){const shown=curRows.length,sel=curRows.filter(p=>selIds.has(p.id)).length;all.checked=shown>0&&sel===shown;all.indeterminate=sel>0&&sel<shown;}};
+  $('#lsa').onchange=e=>{curRows.forEach(p=>{if(e.target.checked)selIds.add(p.id);else selIds.delete(p.id);});draw();};
+  $('#bkc').onclick=()=>{selIds.clear();draw();};
+  $('#bka').onclick=async()=>{
+    const ids=[...selIds],st=$('#bks').value;if(!ids.length)return;
+    if(ids.length>1&&!confirm('Set '+ids.length+' posts to '+st+'?'))return;
+    const prev=ids.map(id=>[id,(posts.find(p=>p.id===id)||{}).status]);
+    $('#bka').disabled=true;
+    const r=await sb.from('posts').update({status:st}).in('id',ids);
+    if(r.error){$('#bka').disabled=false;return alert('Could not update: '+r.error.message);}
+    selIds.clear();await loadPosts();tableView();
+    toast(ids.length+' post'+(ids.length===1?'':'s')+' set to '+st+'.',async()=>{
+      const by={};prev.forEach(([id,s])=>{if(s)(by[s]=by[s]||[]).push(id);});
+      for(const [s,list] of Object.entries(by)){const u=await sb.from('posts').update({status:s}).in('id',list);if(u.error)return alert('Could not undo: '+u.error.message);}
+      await loadPosts();tableView();});};
   draw();
   $('#lq').oninput=e=>{ls.q=e.target.value;draw();};
   [['lpf','pf'],['lpi','pi'],['lst','st'],['lap','ap']].forEach(([i,k])=>$('#'+i).onchange=e=>{ls[k]=e.target.value;draw();});
@@ -328,6 +356,52 @@ function feedView(){
   $('#app').innerHTML=miniHead()+`<main>${viewbar('feed')}<p style="color:var(--mute);margin:0">How the Instagram grid will look, newest first (${ig.length} posts). Posts without a Google Drive photo show their caption instead.</p>${ig.length?`<div class="fg">${ig.map(p=>{const t=thumbUrl(p.visual,'w400');return `<button data-id="${p.id}" aria-label="${esc(p.post_date||'')} ${esc(p.format||'')}">${t?`<img src="${t}" alt="" loading="lazy" onerror="this.remove()">`:''}<div class="t">${esc((p.caption||'').slice(0,70))}</div><span>${esc((p.post_date||'').slice(5))} · ${esc(p.format||'')}</span></button>`;}).join('')}</div>`:'<div class="empty">No Instagram posts yet for this client.</div>'}</main>`;
   miniBind(feedView);
   document.querySelectorAll('.fg button').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+}
+let insRange='all';
+function insightsView(){
+  const td=iso(new Date());
+  const from=insRange==='30'?addDays(td,-30):insRange==='90'?addDays(td,-90):'';
+  const rs=posts.filter(p=>p.reach!=null&&(!from||(p.post_date&&p.post_date>=from)));
+  const sum=k=>rs.reduce((a,p)=>a+(+p[k]||0),0);
+  const avg=(arr,k)=>arr.length?Math.round(arr.reduce((a,p)=>a+(+p[k]||0),0)/arr.length):0;
+  const grp=keyf=>{const m={};rs.forEach(p=>{const k=keyf(p)||'(none)';(m[k]=m[k]||[]).push(p);});return Object.entries(m).map(([k,a])=>({k,n:a.length,reach:avg(a,'reach'),eng:avg(a,'engagements')})).sort((a,b)=>b.reach-a.reach);};
+  const ib=(n,l)=>`<div class="stat"><b>${n}</b>${l}</div>`;
+  const tbl=(arr,label,colf)=>{const mx=Math.max(1,...arr.map(r=>r.reach));return arr.length?`<div class="tw"><table class="lt"><thead><tr><th>${label}</th><th>Posts</th><th>Avg reach</th><th>Avg engagements</th><th style="width:30%"></th></tr></thead><tbody>${arr.map(r=>`<tr><td>${colf?`<span class="pd" style="background:${safeCol(colf(r.k))}"></span>`:''}${esc(r.k)}</td><td>${r.n}</td><td>${r.reach.toLocaleString()}</td><td>${r.eng.toLocaleString()}</td><td><div class="ibar"><div style="width:${Math.max(2,Math.round(r.reach/mx*100))}%"></div></div></td></tr>`).join('')}</tbody></table></div>`:'';};
+  const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const byDow=DOW.map((d,i)=>{const a=rs.filter(p=>p.post_date&&((new Date(p.post_date+'T00:00').getDay()+6)%7)===i);return {k:d,n:a.length,reach:avg(a,'reach'),eng:avg(a,'engagements')};}).filter(r=>r.n>0);
+  const top=rs.slice().sort((a,b)=>(b.reach||0)-(a.reach||0)).slice(0,5);
+  const rate=sum('reach')?Math.round(sum('engagements')/sum('reach')*1000)/10:0;
+  const cname=(clients.find(c=>c.id===cid)||{}).name||'';
+  $('#app').innerHTML=miniHead()+`<main>${viewbar('insights')}<div class="row" style="margin-bottom:6px"><h2 style="margin:0;flex:1">Insights${cname?' · '+esc(cname):''}</h2><select id="insr" style="width:auto" aria-label="Period"><option value="all"${insRange==='all'?' selected':''}>All time</option><option value="30"${insRange==='30'?' selected':''}>Last 30 days</option><option value="90"${insRange==='90'?' selected':''}>Last 90 days</option></select></div>
+  ${rs.length?`<p style="color:var(--mute);margin:0 0 6px">Based on ${rs.length} post${rs.length===1?'':'s'} with results.</p>
+  <div class="stats">${ib(sum('reach').toLocaleString(),'Total reach')}${ib(avg(rs,'reach').toLocaleString(),'Average reach per post')}${ib(sum('likes').toLocaleString(),'Likes / reactions')}${ib(sum('comments_count').toLocaleString(),'Comments')}${ib(sum('shares_saves').toLocaleString(),'Shares / saves')}${ib(rate+'%','Engagements per reach')}</div>
+  <h3>Top posts by reach</h3>${top.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><div><b>${esc(p.platform)}</b> <span class="meta">${esc(p.post_date||'')} · ${esc(p.pillar||'')}</span></div><div>${esc((p.caption||'').slice(0,90))||'<span class="meta">(no caption)</span>'}</div></div><div style="text-align:right"><b>${(p.reach||0).toLocaleString()}</b><div class="meta">reach</div></div></button>`).join('')}
+  <h3>By content pillar</h3>${tbl(grp(p=>p.pillar),'Pillar',k=>PILLARS[k])}
+  <h3>By platform</h3>${tbl(grp(p=>p.platform),'Platform',k=>PCOL[k])}
+  <h3>By weekday</h3>${tbl(byDow,'Day')}
+  <p style="color:var(--mute);font-size:13px">Weekday and pillar averages are only a hint when there are just a few posts in a group. Results come from Tools, Import results from Meta, or the numbers you type into a post.</p>`
+  :`<div class="empty">No results yet${from?' in this period':''}. Use <b>Tools, Import results from Meta</b>, or type the numbers into a posted post, and this page fills in.</div>`}</main>`;
+  miniBind(insightsView);
+  $('#insr').onchange=e=>{insRange=e.target.value;insightsView();};
+  document.querySelectorAll('.wp[data-id]').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+}
+let mlF='all';
+async function mediaLibView(){
+  $('#app').innerHTML=miniHead()+`<main>${viewbar('media')}<h2 style="margin:0 0 8px">Media library</h2><div id="mlb2" style="color:var(--mute)">Loading...</div></main>`;
+  miniBind(mediaLibView);
+  const ids=posts.map(p=>p.id);let all=[],err='';
+  for(let i=0;i<ids.length;i+=100){const r=await sb.from('post_media').select('*').in('post_id',ids.slice(i,i+100)).order('created_at',{ascending:false});if(r.error){err=r.error.message;break;}all=all.concat(r.data||[]);}
+  if(vw!=='media'||!$('#mlb2'))return;
+  if(err){$('#mlb2').innerHTML='<span class="err">Could not load: '+esc(err)+'</span>';return;}
+  const isImg=m=>(m.mime_type||'').startsWith('image/'),isVid=m=>(m.mime_type||'').startsWith('video/');
+  const draw=()=>{
+    const f=all.filter(m=>mlF==='all'||(mlF==='image'&&isImg(m))||(mlF==='video'&&isVid(m))||(mlF==='failed'&&m.status==='failed'));
+    $('#mlb2').innerHTML=`<div class="row" style="margin-bottom:10px"><div class="seg" role="group" aria-label="Filter">${[['all','All'],['image','Photos'],['video','Videos'],['failed','Failed']].map(([v,l])=>`<button type="button" class="mf${v===mlF?' on':''}" data-f="${v}">${l}</button>`).join('')}</div><span>${f.length} file${f.length===1?'':'s'}</span></div>`
+      +(f.length?`<div class="mg">${f.map(m=>{const p=posts.find(x=>x.id===m.post_id)||{};return `<div class="mc"><div class="mt">${m.status==='done'&&isImg(m)&&m.drive_file_id?`<img alt="" loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(m.drive_file_id)}&sz=w300" onerror="this.remove()">`:`<span>${isVid(m)?'\u{1F3AC}':'\u{1F5BC}️'}</span>`}</div><div class="mi2"><div class="mn">${esc(String(m.file_name||'').replace(/^\d+_/,''))}</div><small>${esc(p.post_date||'')} · ${esc(p.platform||'')} · ${m.status==='done'?'Sent ✓':m.status==='failed'?'Failed':'Sending…'}</small><div class="row" style="margin-top:6px"><button type="button" class="mpb" data-id="${esc(m.post_id)}" style="min-height:0;padding:4px 10px;font-size:12px">Open post</button>${m.status==='done'&&/^https:\/\//i.test(m.drive_link||'')?`<a href="${esc(m.drive_link)}" target="_blank" rel="noopener noreferrer">Open in Drive</a>`:''}</div></div></div>`;}).join('')}</div>`:'<div class="empty">No uploads yet. Files that clients (or you) add to a post show up here.</div>');
+    document.querySelectorAll('.mf').forEach(b=>b.onclick=()=>{mlF=b.dataset.f;draw();});
+    document.querySelectorAll('.mpb').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
+  };
+  draw();
 }
 function copyMonth(){
   const y=month.getFullYear(),m=month.getMonth(),src=posts.filter(p=>inMonth(p,y,m));
@@ -357,6 +431,8 @@ function adminView(){
   if(vw==='all') return allView();
   if(vw==='list') return tableView();
   if(vw==='feed') return feedView();
+  if(vw==='insights') return insightsView();
+  if(vw==='media') return mediaLibView();
   const y=month.getFullYear(),m=month.getMonth();
   const mp=posts.filter(p=>p.post_date&&new Date(p.post_date+'T00:00').getMonth()===m&&new Date(p.post_date+'T00:00').getFullYear()===y);
   const cnt=s=>mp.filter(p=>p.status===s).length;
@@ -386,7 +462,7 @@ function adminView(){
     const dps=posts.filter(p=>p.post_date===ds),chips=dps.slice(0,3).map(chipHtml)+(dps.length>3?`<button class="more" data-wk="${ds}">+${dps.length-3} more</button>`:'');
     cells+=`<div class="day${d.getMonth()!==m?' off':''}${ds===todayS?' today':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
-  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
+  $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="insb">Insights</button><button id="mlb">Media</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
   `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   ${viewbar('month')}<div class="sumrow"><b>${mp.length} post${mp.length===1?'':'s'}</b>${stList().map(x=>`<span class="sb s-${x.replace(/ /g,'-')}">${cnt(x)} ${x==='Approved'?'approved by you':x}</span>`).join('')}<span class="sb b-Approved">${mp.filter(p=>p.approval==='Approved').length} approved by client</span><span class="sb b-Pending">${mp.filter(p=>p.approval==='Pending').length} awaiting client</span><span class="sb b-Changes">${need} need attention</span></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
@@ -405,7 +481,7 @@ function adminView(){
   $('#nm').onclick=()=>{month.setMonth(month.getMonth()+1);adminView();};
   bindLegend();bindVB();$('#cpn').onclick=copyMonth;$('#np').onclick=()=>postForm();document.querySelectorAll('.np2').forEach(b=>b.onclick=()=>postForm());
   $('#st').onclick=()=>settingsForm();
-  $('#icb').onclick=exportIcs;
+  $('#icb').onclick=exportIcs;$('#insb').onclick=()=>{vw='insights';adminView();};$('#mlb').onclick=()=>{vw='media';adminView();};
   document.querySelectorAll('.agenda .wp').forEach(b=>b.onclick=()=>postForm(posts.find(p=>p.id===b.dataset.id)));
   document.querySelectorAll('.more').forEach(b=>b.onclick=()=>{const dd=new Date(b.dataset.wk+'T00:00');wkStart=new Date(dd.getFullYear(),dd.getMonth(),dd.getDate()-((dd.getDay()+6)%7));vw='week';adminView();});
   $('#rpb').onclick=()=>{vw='report';adminView();};
@@ -709,6 +785,9 @@ function helpForm(admin){
   <li><b>Visual / photo</b>: upload the photo or video to Google Drive, set sharing to "Anyone with the link", and paste the link. The client sees an <b>Open the photo or video</b> button.</li>
   <li><b>Results</b>: after a post is live, open it and type the numbers under Results.</li>
   <li><b>Year</b> shows all 12 months at a glance. Click a month to open it.</li>
+  <li><b>Insights</b> (under More): your top posts and average results by pillar, platform and weekday, based on the results you have saved.</li>
+  <li><b>Media</b> (under More): every photo and video added to this client's posts, with links to Drive.</li>
+  <li><b>List</b> view: tick several posts, choose a status and click Set status to change them all at once. There is an Undo.</li>
   <li><b>Report</b>: pick the month and click Print / save as PDF to send to the client.</li>
   <li><b>Settings</b>: weekly goals, pillar names and colours, the mix warning, and key dates for the selected client.</li></ul>
   <h3>Symbols</h3><p>○ Draft · □ Approved · ■ Scheduled · ● Posted · ✓ client approved · (!) changes requested or no caption · ★ key date</p>
