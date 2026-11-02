@@ -1502,5 +1502,318 @@ document.addEventListener('keydown',e=>{
 })();
 </script>
 
+<!-- UI UPGRADE 2: command palette, insights charts, bulk edit, theme switch, client tour -->
+<style>
+html[data-theme=light]{--bg:#f6f5fa;--card:#fff;--ink:#1d2030;--mute:#6b6f85;--line:#e1e0ec;--acc:#4b3fd6;--accink:#fff;color-scheme:light}
+html[data-theme=dark]{--bg:#14151f;--card:#1d1f2e;--ink:#eceefa;--mute:#9a9eb8;--line:#2d3047;--acc:#8d83ff;--accink:#14151f;color-scheme:dark}
+#kov,.tov{position:fixed;inset:0;background:#0008;z-index:10000;display:flex;justify-content:center;align-items:flex-start;padding:12vh 12px 0}
+.tov{align-items:center;padding:16px}.tov .card{max-width:380px}
+#kbx{width:min(560px,94vw);background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 60px #0006;overflow:hidden}
+#kbx input{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:14px 16px;font-size:16px;background:var(--card)}
+#kls{max-height:50vh;overflow:auto}
+#kls button{display:flex;width:100%;justify-content:space-between;gap:12px;border:0;border-radius:0;text-align:left;padding:9px 16px;background:none;box-shadow:none}
+#kls button.on{background:var(--acc);color:var(--accink)}#kls small{opacity:.7}
+.chip.selc{outline:3px solid var(--acc);outline-offset:1px}
+#bkb2{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9000;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--acc);border-radius:14px;padding:10px 14px;box-shadow:0 10px 40px #0004;max-width:96vw}
+#bkb2 select,#bkb2 input{width:auto}
+@media(max-width:900px){#bkb2{bottom:72px}}
+.hm{display:grid;grid-template-columns:36px repeat(17,minmax(14px,1fr));gap:2px;font-size:10px;color:var(--mute);overflow-x:auto}
+.hm i{aspect-ratio:1;border-radius:3px;background:var(--line)}
+.donut{width:120px;height:120px;border-radius:50%;flex:none;-webkit-mask:radial-gradient(circle,#0000 36px,#000 37px);mask:radial-gradient(circle,#0000 36px,#000 37px)}
+.empty{flex-direction:column;text-align:center;padding:28px;font-size:15px}.empty::before{content:"🗓️";font-size:34px}
+@media print{@page{margin:14mm}.stat,.wd,.ibar,.card,.insx{break-inside:avoid}h3{break-after:avoid}#bkb2,#kov,.tov,#thm{display:none!important}}
+</style>
+<script>
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s);
+const isAdm=()=>typeof me!=='undefined'&&me&&me.role==='admin';
+const monOf=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));
+const NAV=[['month','Calendar'],['week','Week'],['list','List'],['board','Board'],['feed','Feed'],['year','Year'],['insights','Insights'],['media','Media'],['report','Report'],['all','All clients']];
+function go(v){vw=v;if(v==='week')wkStart=monOf(new Date());if(v==='year')yr=month.getFullYear();adminView();}
+
+/* light / dark switch */
+let T=null;try{T=localStorage.getItem('theme');}catch(e){}
+const setT=t=>{const h=document.documentElement;t?h.setAttribute('data-theme',t):h.removeAttribute('data-theme');};
+setT(T);
+function toggleTheme(){const c=document.documentElement.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  T=c==='dark'?'light':'dark';setT(T);try{localStorage.setItem('theme',T);}catch(e){}}
+
+/* bulk select (month + week) */
+let selMode=false;const selSet=new Set();
+function markSel(){document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('selc',selSet.has(c.dataset.id)));bar();}
+function bar(){let b=Q('#bkb2');
+  if(!selMode||!isAdm()){if(b)b.remove();return;}
+  if(!b){b=document.createElement('div');b.id='bkb2';
+    const op=(a,l)=>`<option value="">${l}…</option>`+a.map(x=>`<option>${esc(x)}</option>`).join('');
+    b.innerHTML=`<b id="bkc2"></b><select id="bs" aria-label="Status">${op(STATUS_ALL,'Status')}</select><select id="bp" aria-label="Platform">${op(PLATFORMS,'Platform')}</select><select id="bi" aria-label="Pillar">${op(Object.keys(PILLARS),'Pillar')}</select><input id="bd" type="number" placeholder="Shift days" aria-label="Shift dates by days" style="width:110px"><button class="p" id="bgo" type="button">Apply</button><button id="bcl" type="button">Done</button>`;
+    document.body.appendChild(b);
+    Q('#bcl').onclick=toggleSel;
+    Q('#bgo').onclick=async()=>{const ids=[...selSet];if(!ids.length)return alert('Click some posts first.');
+      const u={};if(Q('#bs').value)u.status=Q('#bs').value;if(Q('#bp').value)u.platform=Q('#bp').value;if(Q('#bi').value)u.pillar=Q('#bi').value;
+      const sh=parseInt(Q('#bd').value)||0;if(!Object.keys(u).length&&!sh)return alert('Choose something to change.');
+      const prev=ids.map(id=>{const p=posts.find(x=>x.id===id)||{};return {id,status:p.status,platform:p.platform,pillar:p.pillar,post_date:p.post_date};});
+      let err=null;
+      if(Object.keys(u).length){const r=await sb.from('posts').update(u).in('id',ids);err=r.error;}
+      if(!err&&sh)for(const p of prev){if(!p.post_date)continue;const r=await sb.from('posts').update({post_date:addDays(p.post_date,sh)}).eq('id',p.id);if(r.error){err=r.error;break;}}
+      if(err)return alert('Could not update: '+err.message);
+      selSet.clear();await loadPosts();adminView();
+      toast('Updated '+ids.length+' post'+(ids.length===1?'':'s')+'.',async()=>{for(const p of prev)await sb.from('posts').update({status:p.status,platform:p.platform,pillar:p.pillar,post_date:p.post_date}).eq('id',p.id);await loadPosts();adminView();});};}
+  Q('#bkc2').textContent=selSet.size+' selected';}
+function toggleSel(){selMode=!selMode;if(!selMode){selSet.clear();const b=Q('#bkb2');if(b)b.remove();}
+  document.body.classList.toggle('sel',selMode);const s=Q('#selb');if(s)s.textContent=selMode?'✓ Selecting':'☑ Select';markSel();}
+document.addEventListener('click',e=>{
+  if(!selMode||!isAdm()||Q('#dlg').open)return;
+  const c=e.target.closest('.chip[data-id]');
+  if(c&&(c.closest('.grid')||c.closest('.wg'))){e.preventDefault();e.stopPropagation();const id=c.dataset.id;selSet.has(id)?selSet.delete(id):selSet.add(id);markSel();return;}
+  if(e.target.closest('.grid .day,.wg .wc')&&!e.target.closest('.more'))e.stopPropagation();
+},true);
+
+/* Insights: reach chart, pillar donut, posting heatmap */
+function insX(){
+  const m=Q('main');if(!m||m.querySelector('.insx'))return;
+  const td=iso(new Date()),from=insRange==='30'?addDays(td,-30):insRange==='90'?addDays(td,-90):'';
+  const rs=posts.filter(p=>p.reach!=null&&p.post_date&&(!from||p.post_date>=from)).sort((a,b)=>a.post_date.localeCompare(b.post_date));
+  let h='<div class="insx">';
+  if(rs.length>1){const W=700,H=180,P=28,mx=Math.max(1,...rs.map(p=>p.reach)),x=i=>P+i*(W-2*P)/(rs.length-1),y=v=>H-P-(v/mx)*(H-2*P);
+    h+=`<h3>Reach over time</h3><div class="card" style="padding:10px"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Reach per post over time"><line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="var(--line)"/><polyline fill="none" stroke="var(--acc)" stroke-width="2.5" points="${rs.map((p,i)=>x(i)+','+y(p.reach)).join(' ')}"/>${rs.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.reach)}" r="4" fill="var(--acc)"><title>${esc(p.post_date+' · '+p.platform+': '+p.reach)}</title></circle>`).join('')}<text x="${P}" y="14" font-size="11" fill="var(--mute)">${mx.toLocaleString()}</text><text x="${P}" y="${H-8}" font-size="11" fill="var(--mute)">${esc(rs[0].post_date)}</text><text x="${W-P}" y="${H-8}" font-size="11" text-anchor="end" fill="var(--mute)">${esc(rs[rs.length-1].post_date)}</text></svg></div>`;}
+  const cnt={};posts.forEach(p=>{if(p.pillar)cnt[p.pillar]=(cnt[p.pillar]||0)+1;});const tot=Object.values(cnt).reduce((a,b)=>a+b,0);
+  if(tot){let a=0;const seg=Object.entries(cnt).map(([k,n])=>{const s=a;a+=n/tot*100;return `${safeCol(PILLARS[k])} ${s}% ${a}%`;});
+    h+=`<h3>Content pillar mix (all posts)</h3><div class="row" style="gap:20px"><div class="donut" style="background:conic-gradient(${seg.join(',')})" role="img" aria-label="Pillar mix"></div><div>${Object.entries(cnt).map(([k,n])=>`<div><span class="pd" style="background:${safeCol(PILLARS[k])}"></span>${esc(k)} · ${n} (${Math.round(n/tot*100)}%)</div>`).join('')}</div></div>`;}
+  const hm={};let hx=0;
+  posts.forEach(p=>{if(!p.post_date||!p.post_time)return;const d=(new Date(p.post_date+'T00:00').getDay()+6)%7,hr=Math.min(22,Math.max(6,+p.post_time.slice(0,2))),k=d+'-'+hr;hm[k]=(hm[k]||0)+1;hx=Math.max(hx,hm[k]);});
+  if(hx){let g='<span></span>';for(let hr=6;hr<=22;hr++)g+=`<span style="text-align:center">${hr%12||12}${hr<12?'a':'p'}</span>`;
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((dn,d)=>{g+=`<span>${dn}</span>`;for(let hr=6;hr<=22;hr++){const n=hm[d+'-'+hr]||0;g+=`<i title="${dn} ${hr}:00 · ${n} post${n===1?'':'s'}"${n?` style="background:color-mix(in srgb,var(--acc) ${20+Math.round(n/hx*80)}%,var(--card))"`:''}></i>`;}});
+    h+=`<h3>When you post (all posts)</h3><div class="tw" style="padding:10px"><div class="hm">${g}</div></div>`;}
+  h+='</div>';
+  const t=[...m.querySelectorAll('h3')].find(x=>/Top posts/.test(x.textContent));
+  t?t.insertAdjacentHTML('beforebegin',h):m.insertAdjacentHTML('beforeend',h);
+}
+const _ins=window.insightsView;
+window.insightsView=function(){const r=_ins.apply(this,arguments);try{insX();}catch(e){console.error('ui2',e);}return r;};
+
+/* Ctrl+K palette */
+function pal(){
+  if(Q('#kov'))return;
+  const o=document.createElement('div');o.id='kov';
+  o.innerHTML='<div id="kbx" role="dialog" aria-label="Search"><input id="kin" placeholder="Search posts, views, actions…" autocomplete="off"><div id="kls"></div></div>';
+  document.body.appendChild(o);
+  const inp=Q('#kin'),ls=Q('#kls');let items=[],cur=0;
+  const close=()=>o.remove(),run=it=>{close();setTimeout(it[2],0);};
+  const draw=()=>{const q=inp.value.toLowerCase().trim(),A=[];
+    if(isAdm()){NAV.forEach(([v,l])=>A.push([l,'View',()=>go(v)]));
+      A.push(['New post','Action',()=>postForm()],['Tools','Action',()=>toolsForm()],['Settings','Action',()=>settingsForm()],['Select posts (bulk edit)','Action',toggleSel],['Today','Action',()=>Q('#tdy')&&Q('#tdy').click()]);
+      clients.forEach(c=>A.push([c.name,'Client',async()=>{cid=c.id;await loadPosts();adminView();}]));}
+    A.push(['Toggle light / dark','Action',toggleTheme]);
+    items=A.filter(a=>!q||a[0].toLowerCase().includes(q));
+    if(q)posts.filter(p=>((p.caption||'')+' '+(p.hashtags||'')+' '+(p.platform||'')+' '+(p.pillar||'')+' '+(p.post_date||'')).toLowerCase().includes(q)).slice(0,8)
+      .forEach(p=>items.push([(p.post_date||'')+' · '+(p.platform||'')+' — '+(p.caption||'(no caption)').slice(0,50),'Post',()=>{if(isAdm())postForm(p);else{lv=false;idx=posts.indexOf(p);clientView();}}]));
+    cur=Math.min(cur,Math.max(0,items.length-1));
+    ls.innerHTML=items.map((it,i)=>`<button type="button" data-i="${i}" class="${i===cur?'on':''}"><span>${esc(it[0])}</span><small>${it[1]}</small></button>`).join('')||'<div style="padding:14px;color:var(--mute)">No matches</div>';};
+  inp.oninput=()=>{cur=0;draw();};
+  inp.onkeydown=e=>{if(e.key==='Escape')close();else if(e.key==='ArrowDown'){e.preventDefault();cur=Math.min(items.length-1,cur+1);draw();}
+    else if(e.key==='ArrowUp'){e.preventDefault();cur=Math.max(0,cur-1);draw();}else if(e.key==='Enter'&&items[cur])run(items[cur]);};
+  ls.onclick=e=>{const b=e.target.closest('button');if(b)run(items[+b.dataset.i]);};
+  o.onclick=e=>{if(e.target===o)close();};
+  draw();inp.focus();
+}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();pal();}},true);
+
+/* client first-time tour */
+function tour(){
+  if(isAdm()||typeof me==='undefined'||!me||Q('#tour')||!Q('#ap'))return;
+  try{if(localStorage.getItem('tour1'))return;}catch(e){return;}
+  const S=[['Look at the post','This is how it will look on your page. Tap the photo to enlarge it.'],['Approve or ask for changes','Tap Approve if it is good to go. Tap Request changes and tell us what to fix.'],['See everything','Use All posts, Calendar or Feed at the top to see the whole month. Swipe left or right to move between posts.']];
+  let i=0;const o=document.createElement('div');o.id='tour';o.className='tov';document.body.appendChild(o);
+  const draw=()=>{o.innerHTML=`<div class="card" role="dialog" aria-label="Quick tour"><small style="color:var(--mute)">Step ${i+1} of ${S.length}</small><h2 style="margin:4px 0 8px">${S[i][0]}</h2><p style="margin:0 0 16px">${S[i][1]}</p><div class="row"><button class="p" id="tn" type="button">${i<S.length-1?'Next':'Got it'}</button><button id="ts" type="button">Skip</button></div></div>`;
+    Q('#tn').onclick=()=>{if(i<S.length-1){i++;draw();}else end();};Q('#ts').onclick=end;};
+  const end=()=>{try{localStorage.setItem('tour1','1');}catch(e){}o.remove();};
+  draw();
+}
+
+function enh(){
+  const h=Q('header');
+  if(h&&!Q('#thm')){const b=document.createElement('button');b.type='button';b.id='thm';b.textContent='◐';b.title='Light / dark';b.setAttribute('aria-label','Switch light or dark mode');b.onclick=toggleTheme;h.insertBefore(b,Q('#out')||null);}
+  if(isAdm()){const a=Q('#tdy')||Q('#nm')||Q('#nw');
+    if(a&&!Q('#selb')&&(Q('.grid')||Q('.wg'))){const b=document.createElement('button');b.type='button';b.id='selb';b.textContent=selMode?'✓ Selecting':'☑ Select';b.onclick=toggleSel;a.after(b);}
+    markSel();}
+  tour();
+}
+let raf=0;
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(enh);}).observe(Q('#app'),{childList:true,subtree:true});
+enh();
+})();
+</script>
+
+<!-- UI UPGRADE 3: fill month, gap finder, autosave drafts, platform previews, holidays, PNG export, copy buttons, goal rings, best time, density, offline, a11y -->
+<style>
+.hol{display:block;width:100%;text-align:left;margin-top:2px;padding:0 4px;border:0;background:none;font-size:11px;color:var(--mute);min-height:0;box-shadow:none}
+.hol:hover{color:var(--acc);background:none;box-shadow:none}
+.rg{display:flex;align-items:center;gap:10px}.rg svg{flex:none}
+.seem{color:var(--acc);cursor:pointer;font-weight:500}
+.gbtn{min-height:0;padding:3px 10px;margin:2px 4px 2px 0;font-size:12px}
+.skip{position:fixed;left:8px;top:-60px;z-index:20000;background:var(--acc);color:var(--accink);padding:8px 14px;border-radius:8px}.skip:focus{top:8px}
+.chip:focus-visible,.day:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+body.dense .day{min-height:92px}body.dense .chip .th{display:none}body.dense main{padding:12px}body.dense .card{padding:12px}
+body.xl{font-size:19px}body.xl .pc .pb{font-size:19px}
+#bth{font-size:12px;color:var(--mute);margin-top:2px}#bth button{min-height:0;padding:1px 8px;font-size:12px}
+</style>
+<script>
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s);
+const isAdm=()=>typeof me!=='undefined'&&me&&me.role==='admin';
+const monOf=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));
+const dAdd=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){}return null;};
+const h12=h=>(h%12||12)+':00 '+(h<12?'AM':'PM');
+const copy=async t=>{try{await navigator.clipboard.writeText(t);}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove();}toast('Copied.');};
+
+/* ---- holidays ---- */
+const HC={};
+function hol(y){if(HC[y])return HC[y];const m={},P=n=>String(n).padStart(2,'0'),add=(mo,dd,n)=>{const k=y+'-'+P(mo)+'-'+P(dd);(m[k]=m[k]||[]).push(n);};
+  const nth=(mo,dow,n)=>1+((dow-new Date(y,mo-1,1).getDay()+7)%7)+(n-1)*7,last=(mo,dow)=>{const l=new Date(y,mo,0);return l.getDate()-((l.getDay()-dow+7)%7);};
+  add(1,1,"New Year's Day");add(1,nth(1,1,3),'MLK Day');add(2,14,"Valentine's Day");add(2,nth(2,1,3),"Presidents' Day");add(3,17,"St. Patrick's Day");
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451);
+  add(Math.floor((h+l-7*mm+114)/31),((h+l-7*mm+114)%31)+1,'Easter');
+  add(4,22,'Earth Day');add(5,nth(5,0,2),"Mother's Day");add(5,last(5,1),'Memorial Day');add(6,nth(6,0,3),"Father's Day");add(6,19,'Juneteenth');add(7,4,'Independence Day');add(9,nth(9,1,1),'Labor Day');add(10,31,'Halloween');add(11,11,'Veterans Day');
+  const tg=nth(11,4,4);add(11,tg,'Thanksgiving');add(11,tg+1,'Black Friday');add(12,24,'Christmas Eve');add(12,25,'Christmas Day');add(12,31,"New Year's Eve");
+  return HC[y]=m;}
+
+/* ---- gaps + fill month ---- */
+function plan(y,mo){
+  const today=iso(new Date()),last=new Date(y,mo+1,0),out=[];
+  for(let ws=monOf(new Date(y,mo,1));ws<=last;ws=dAdd(ws,7)){
+    const a=iso(ws),b=iso(dAdd(ws,6)),wk=[...Array(7)].map((_,i)=>dAdd(ws,i)).filter(d=>d.getMonth()===mo),inM=wk.filter(d=>iso(d)>=today);
+    if(!inM.length)continue;
+    let days=inM.filter(d=>d.getDay()%6!==0);if(!days.length)days=inM;
+    PLATFORMS.forEach(pl=>{const goal=GOALS[pl]||0;if(!goal)return;
+      const need=Math.ceil(goal*wk.length/7),have=posts.filter(p=>p.platform===pl&&p.post_date>=a&&p.post_date<=b).length,short=need-have;
+      for(let k=0;k<short;k++){let j=Math.floor((k+.5)*days.length/short),t=0,ds;
+        do{ds=iso(days[(j+t)%days.length]);t++;}while(t<days.length&&(posts.some(p=>p.platform===pl&&p.post_date===ds)||out.some(o=>o.platform===pl&&o.date===ds)));
+        out.push({date:ds,platform:pl,week:a,wend:b});}});
+  }
+  return out;}
+async function fillMonth(){
+  const pl=plan(month.getFullYear(),month.getMonth());
+  if(!pl.length)return alert('This month already meets your weekly goals (or has no days left).');
+  if(!confirm('Create '+pl.length+' empty draft posts to reach your weekly goals?'))return;
+  const keys=Object.keys(PILLARS);
+  const rows=pl.map((o,i)=>({client_id:cid,post_date:o.date,platform:o.platform,pillar:keys[i%keys.length],format:'Static Photo',status:'Draft',approval:'Pending'}));
+  const r=await sb.from('posts').insert(rows).select('id');if(r.error)return alert('Could not create: '+r.error.message);
+  const ids=(r.data||[]).map(x=>x.id);await loadPosts();adminView();
+  toast('Added '+rows.length+' drafts.',async()=>{await sb.from('posts').delete().in('id',ids);await loadPosts();adminView();});}
+function gaps(){
+  const g=Q('.grid');if(!g||Q('.insg'))return;
+  const pl=plan(month.getFullYear(),month.getMonth()),by={};
+  pl.forEach(o=>{(by[o.week]=by[o.week]||{end:o.wend,items:{}}).items[o.platform]=(by[o.week].items[o.platform]||[]).concat(o.date);});
+  const f=s=>new Date(s+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'});
+  g.insertAdjacentHTML('afterend',`<div class="card insg" style="margin:12px 0;padding:12px"><div class="row"><b>Gaps against your weekly goals</b><span style="color:var(--mute);font-size:13px;flex:1">${pl.length?pl.length+' post'+(pl.length===1?'':'s')+' short':''}</span>${pl.length?'<button type="button" class="p gbtn" id="fillm">Fill month with drafts</button>':''}</div>`
+    +(Object.entries(by).map(([w,v])=>`<div class="cm"><b>${f(w)} – ${f(v.end)}</b> · ${Object.entries(v.items).map(([p,ds])=>`<button type="button" class="gbtn" data-ds="${ds[0]}" data-pl="${esc(p)}">＋ ${esc(p)}${ds.length>1?' ×'+ds.length:''}</button>`).join('')}</div>`).join('')||'<div style="color:var(--mute);margin-top:6px">All remaining weeks meet your goals ✓</div>')+'</div>');
+  document.querySelectorAll('.gbtn[data-ds]').forEach(b=>b.onclick=()=>postForm({post_date:b.dataset.ds,platform:b.dataset.pl}));
+  if(Q('#fillm'))Q('#fillm').onclick=fillMonth;}
+
+/* ---- calendar as PNG, copy week ---- */
+function png(){
+  const y=month.getFullYear(),mo=month.getMonth(),first=new Date(y,mo,1),off=(first.getDay()+6)%7,wks=Math.ceil((off+new Date(y,mo+1,0).getDate())/7);
+  const W=1400,hd=120,cw=W/7,ch=170,H=hd+28+wks*ch+16,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d'),F='system-ui,sans-serif';
+  const fit=(t,mw)=>{t=String(t||'');if(x.measureText(t).width<=mw)return t;while(t.length>1&&x.measureText(t+'…').width>mw)t=t.slice(0,-1);return t+'…';};
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);x.fillStyle=BRAND||'#4b3fd6';x.fillRect(0,0,W,8);
+  x.fillStyle='#1d2030';x.font='700 34px '+F;x.fillText(((clients.find(c=>c.id===cid)||{}).name||'')+' · '+month.toLocaleString('en',{month:'long',year:'numeric'}),30,66);
+  x.fillStyle='#6b6f85';x.font='16px '+F;x.fillText('Social media content calendar',30,96);
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((n,i)=>x.fillText(n,i*cw+10,hd+18));
+  for(let i=0;i<wks*7;i++){const d=dAdd(first,i-off),cx=(i%7)*cw,cy=hd+28+Math.floor(i/7)*ch,ds=iso(d),inm=d.getMonth()===mo;
+    x.strokeStyle='#e1e0ec';x.strokeRect(cx,cy,cw,ch);x.fillStyle=inm?'#1d2030':'#b0b3c4';x.font='700 15px '+F;x.fillText(d.getDate(),cx+8,cy+20);
+    const ps=posts.filter(p=>p.post_date===ds);x.font='13px '+F;
+    ps.slice(0,4).forEach((p,j)=>{const yy=cy+30+j*30;x.fillStyle=safeCol(PILLARS[p.pillar]);x.fillRect(cx+6,yy,4,24);x.fillStyle='#1d2030';x.fillText(fit(p.platform,cw-26),cx+14,yy+10);x.fillStyle='#6b6f85';x.fillText(fit((p.post_time?p.post_time.slice(0,5)+' ':'')+(p.caption||''),cw-26),cx+14,yy+23);});
+    if(ps.length>4){x.fillStyle='#6b6f85';x.fillText('+'+(ps.length-4)+' more',cx+10,cy+ch-8);}}
+  cv.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=((clients.find(c=>c.id===cid)||{}).name||'calendar').replace(/[^\w-]+/g,'_')+'_'+y+'-'+String(mo+1).padStart(2,'0')+'.png';document.body.appendChild(a);a.click();a.remove();});}
+function copyWeek(){
+  const days=[...Array(7)].map((_,i)=>dAdd(wkStart,i));
+  copy(days.map(d=>{const ds=iso(d),ps=posts.filter(p=>p.post_date===ds).sort((a,b)=>(a.post_time||'').localeCompare(b.post_time||''));
+    return d.toLocaleDateString('en',{weekday:'long',month:'short',day:'numeric'})+'\n'+(ps.map(p=>'  '+(p.post_time?p.post_time.slice(0,5)+' ':'')+p.platform+' — '+(p.caption||'(no caption)').replace(/\s+/g,' ')).join('\n')||'  Nothing planned');}).join('\n\n'));}
+
+/* ---- platform previews: "…more" ---- */
+const CUT={Instagram:125,Facebook:300,LinkedIn:210,TikTok:100,'Google Business Profile':200};
+const _pc=window.postCard;
+window.postCard=function(p){
+  const html=_pc.apply(this,arguments);try{
+    const lim=CUT[p.platform],cap=p.caption||'';if(!lim||cap.length<=lim)return html;
+    const d=document.createElement('div');d.innerHTML=html;
+    const pb=[...d.querySelectorAll('.pb')].find(x=>!x.querySelector('img,iframe,video,a.lnk')&&!x.querySelector('i'));if(!pb)return html;
+    const tg=pb.querySelector('.ptags');pb.dataset.full=cap;pb.dataset.tags=tg?tg.outerHTML:'';
+    pb.innerHTML=esc(cap.slice(0,lim).trimEnd())+'… <span class="seem" role="button" tabindex="0">more</span>';return d.innerHTML;}catch(e){return html;}};
+document.addEventListener('click',e=>{const s=e.target.closest('.seem');if(!s)return;const pb=s.closest('.pb');pb.innerHTML=esc(pb.dataset.full)+(pb.dataset.tags||'');});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('seem'))e.target.click();});
+
+/* ---- composer extras: drafts, copy, best time ---- */
+function bestFor(pl){const a=posts.filter(p=>p.platform===pl&&p.post_time);if(a.length<3)return null;
+  const wr=a.filter(p=>p.reach!=null),by=(arr,f)=>{const g={};arr.forEach(p=>{const h=+p.post_time.slice(0,2);(g[h]=g[h]||[]).push(f(p));});return Object.entries(g).map(([h,v])=>[+h,v]);};
+  if(wr.length>=3){const b=by(wr,p=>p.reach).map(([h,v])=>[h,v.reduce((s,n)=>s+n,0)/v.length]).sort((x,y)=>y[1]-x[1])[0];return {h:b[0],why:'highest average reach'};}
+  const b=by(a,p=>1).sort((x,y)=>y[1].length-x[1].length)[0];return {h:b[0],why:'your most used time'};}
+const DF=['post_date','post_time','platform','pillar','format','status','campaign','caption','visual','hashtags','notes'];
+const dlg=Q('#dlg');
+dlg.addEventListener('close',()=>{if(window.__dok&&Date.now()-window.__dok.t<8000)ls(window.__dok.k,null);window.__dok=null;});
+dlg.addEventListener('close',()=>{});
+function extras(p){
+  const f=Q('#pf');if(!f||f.dataset.x3)return;f.dataset.x3='1';p=p||{};
+  const key='draft:'+cid+':'+(p.id||'new');
+  /* copy */
+  const cx=Q('#cx');if(cx){const b=document.createElement('button');b.type='button';b.textContent='Copy caption';b.onclick=()=>copy((f.caption.value+(f.hashtags.value?'\n\n'+f.hashtags.value:'')).trim());cx.after(b);}
+  /* best time */
+  const mn=Q('#mn');if(mn){const bt=document.createElement('div');bt.id='bth';mn.after(bt);
+    const upd=()=>{const r=bestFor(f.platform.value);bt.innerHTML=r?`Tip: ${esc(f.platform.value)} · ${h12(r.h)} (${r.why}) <button type="button" id="usebt">Use</button>`:'';
+      if(r)Q('#usebt').onclick=()=>{f.post_time.value=String(r.h).padStart(2,'0')+':00';f.post_time.dispatchEvent(new Event('change',{bubbles:true}));};};
+    f.platform.addEventListener('change',upd);upd();}
+  /* drafts */
+  let d=null;try{d=JSON.parse(ls(key)||'null');}catch(e){}
+  const meaningful=o=>o&&(o.caption||o.hashtags||o.notes||o.visual);
+  if(meaningful(d)){const w=document.createElement('div');w.className='warn';
+    w.innerHTML=`Unsaved draft from ${esc(new Date(d.t).toLocaleString())}. <button type="button" id="drr">Restore</button> <button type="button" id="drd">Discard</button>`;
+    f.querySelector('h2').after(w);
+    Q('#drd').onclick=()=>{ls(key,null);w.remove();};
+    Q('#drr').onclick=()=>{DF.forEach(n=>{const el=f.elements.namedItem(n);if(!el||d[n]==null)return;
+      if(n==='platform'){const b=f.querySelector('.ptog button[data-p="'+d[n].replace(/"/g,'')+'"]');if(b){b.click();return;}}
+      el.value=d[n];el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});w.remove();};}
+  f.addEventListener('input',()=>{const o={t:Date.now()};DF.forEach(n=>{const el=f.elements.namedItem(n);if(el)o[n]=el.value;});if(meaningful(o))ls(key,JSON.stringify(o));});
+  f.addEventListener('submit',()=>{window.__dok={k:key,t:Date.now()};});
+}
+const _pf=window.postForm;
+window.postForm=function(p){const r=_pf.apply(this,arguments);try{extras(p);}catch(e){console.error('ui3',e);}return r;};
+
+/* ---- density / text size ---- */
+if(ls('dense')==='1')document.body.classList.add('dense');if(ls('xl')==='1')document.body.classList.add('xl');
+function toggleDens(){const adm=isAdm(),c=adm?'dense':'xl',on=document.body.classList.toggle(c);ls(c,on?'1':'0');}
+
+/* ---- enhance on every render ---- */
+function enh(){
+  const h=Q('header');
+  if(h&&!Q('#dns')){const b=document.createElement('button');b.type='button';b.id='dns';b.textContent=isAdm()?'↕':'A+';b.title=isAdm()?'Compact / comfortable':'Larger text';b.setAttribute('aria-label',b.title);b.onclick=toggleDens;h.insertBefore(b,Q('#thm')||Q('#out')||null);}
+  const mn=Q('main');if(mn&&!mn.id){mn.id='main';mn.setAttribute('tabindex','-1');}
+  if(!Q('.skip')){const a=document.createElement('a');a.className='skip';a.href='#main';a.textContent='Skip to content';document.body.prepend(a);}
+  if(isAdm()){
+    const g=Q('.grid'),anchor=Q('#selb')||Q('#tdy')||Q('#nm')||Q('#nw');
+    if(g&&anchor&&!Q('#fillb')){[['fillb','✨ Fill month',fillMonth],['pngb','🖼 Image',png]].reverse().forEach(([id,t,fn])=>{const b=document.createElement('button');b.type='button';b.id=id;b.textContent=t;b.onclick=fn;anchor.after(b);});}
+    if(Q('.wg')&&anchor&&!Q('#cpw')){const b=document.createElement('button');b.type='button';b.id='cpw';b.textContent='⧉ Copy week';b.onclick=copyWeek;anchor.after(b);}
+    if(g){gaps();
+      g.querySelectorAll('.day[data-date]:not([data-hol])').forEach(c=>{c.dataset.hol='1';const ds=c.dataset.date,hs=hol(+ds.slice(0,4))[ds];if(!hs)return;
+        const sp=c.querySelector(':scope>span');hs.slice().reverse().forEach(n=>{const b=document.createElement('button');b.type='button';b.className='hol';b.textContent='☆ '+n;b.title='Make a post for '+n;
+          b.onclick=()=>postForm({post_date:ds,caption:'Happy '+n+'! ',status:'Draft'});sp&&sp.after(b);});});}
+  }
+  document.querySelectorAll('.pace .stat:not([data-rg])').forEach(s=>{s.dataset.rg='1';const b=s.querySelector('b'),m=b&&b.textContent.match(/^(\d+) \/ (\d+)$/);if(!m)return;
+    const n=+m[1],t=+m[2],pc=t?Math.min(1,n/t):0;s.classList.add('rg');
+    s.innerHTML=`<svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="${n} of ${t}"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="20" cy="20" r="16" fill="none" stroke="${t&&n>=t?'#177a4e':'var(--acc)'}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(pc*100.5).toFixed(1)} 100.5" transform="rotate(-90 20 20)"/></svg><div>${s.innerHTML}</div>`;});
+  document.querySelectorAll('.chip[data-id]:not([aria-label])').forEach(c=>c.setAttribute('aria-label',(c.title||'Post')+': '+((c.querySelector('.cl2')||{}).textContent||'no caption')));
+}
+let raf=0;
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(enh);}).observe(Q('#app'),{childList:true,subtree:true});
+new MutationObserver(()=>{const h=dlg.querySelector('h2');dlg.setAttribute('aria-label',h?h.textContent:'Dialog');}).observe(dlg,{childList:true});
+enh();
+
+/* ---- offline shell ---- */
+if('serviceWorker' in navigator&&location.protocol==='https:')addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+})();
+</script>
+
 </body>
 </html>
