@@ -148,6 +148,11 @@ body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}b
 .bcard .bp{font-weight:500}
 .bcard .bc{color:var(--mute);font-size:13px;margin:2px 0 4px;overflow-wrap:anywhere}
 .bempty{color:var(--mute);font-size:13px;padding:6px 2px}
+.pinwrap{position:relative;line-height:0}
+.pinwrap.pinning{cursor:crosshair;outline:3px dashed #4b3fd6;outline-offset:-3px}
+.pin{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;min-height:0;border-radius:50%;background:#e5484d;color:#fff;border:2px solid #fff;font:600 12px/22px system-ui,sans-serif;text-align:center;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.45);cursor:pointer}
+.pin.done{background:#7a7f95}.pin.tmp{background:#4b3fd6}
+.cm.flash{outline:2px solid #e5484d;outline-offset:2px}
 </style>
 </head>
 <body>
@@ -160,7 +165,7 @@ const INVITED=/type=invite/.test(location.hash);
 const sb=supabase.createClient(SB_URL,SB_KEY);
 // Clients read from this source. After running rls-hardening.sql, change to 'client_posts' to hide notes/results at the database level.
 const CLIENT_SRC='client_posts';
-const CLIENT_COLS='id,client_id,post_date,post_time,platform,pillar,format,status,approval,caption,visual,hashtags,campaign';
+const CLIENT_COLS='id,client_id,post_date,post_time,platform,pillar,format,status,approval,caption,visual,hashtags,campaign,due_date';
 sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY')setTimeout(async()=>{await boot();pwForm();},0);});
 let PILLARS={'Educational':'#7c5cd6','Promo':'#c2410c','Behind the Scenes':'#0f766e','Testimonials':'#b8326f','Community':'#2f6bc4','Trending':'#9a6700','Spotlight':'#2f7d3f'};
 const PLATFORMS=['Google Business Profile','Facebook','Instagram','TikTok','LinkedIn'];
@@ -203,6 +208,7 @@ async function boot0(){
   await loadPosts();
   if(me.role!=='admin'){const t0=iso(new Date());let i0=posts.findIndex(p=>p.approval==='Pending'&&p.status!=='Posted');if(i0<0)i0=posts.findIndex(p=>p.post_date>=t0);idx=Math.max(0,i0);}
   me.role==='admin'?adminView():clientView();
+  startLive();
 }
 function loginView(msg=''){
   $('#app').innerHTML=`<form class="login" id="lf"><h1 style="margin-top:0">Content Calendar</h1>
@@ -244,7 +250,7 @@ async function loadPosts(){
 }
 const head=(extra='')=>`<header><h1>${me&&me.role!=='admin'?`${LOGO?`<img src="${esc(LOGO)}" alt="" onerror="this.remove()" style="height:42px;max-width:140px;object-fit:contain;margin-right:10px">`:''}<span>${esc(CNAME)||'Content Calendar'}<small class="sub">Social media calendar</small></span>`:'Content Calendar'}</h1>${extra}${me&&me.role==='admin'?'<button id="tl">Tools</button>':'<button id="hp">Help</button>'}<button id="out">Log out</button></header>`;
 function bindOut(){
-  $('#out').onclick=async()=>{await sb.auth.signOut();me=null;applyBrand();loginView();};
+  $('#out').onclick=async()=>{stopLive();await sb.auth.signOut();me=null;applyBrand();loginView();};
   if(me&&me.role==='admin'){const ids=['allb','rpb','insb','mlb','yrb','icb','st','pr'].map(i=>document.getElementById(i)).filter(Boolean);
     if(ids.length){const dt=document.createElement('details');dt.className='menu';dt.innerHTML='<summary>More</summary><div class="mi"></div>';ids.forEach(b=>dt.lastChild.appendChild(b));document.querySelector('header').insertBefore(dt,document.getElementById('tl'));}}
   if($('#tl')) $('#tl').onclick=toolsForm;
@@ -272,10 +278,11 @@ const picon=pl=>`<span class="pi" style="background:${PCOL[pl]||'#888'}" aria-hi
 let fPil=null,fPlat=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat);
 const progress=(ps,who)=>{const n=ps.length,a=ps.filter(p=>p.approval==='Approved').length;if(!n)return '';return `<div class="progw${a===n?' done':''}"><div style="margin-bottom:4px">${a===n?'All '+n+' posts approved 🎉':a+' of '+n+' posts approved'+(who?' by '+who:'')}</div><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${a}"><div style="width:${a/n*100}%"></div></div></div>`;};
 const rel=ds=>{if(!ds)return '';const n=Math.round((new Date(ds+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);return n<0?(-n===1?'was due yesterday':'was due '+(-n)+' days ago'):n===0?'today':n===1?'tomorrow':'in '+n+' days';};
+const dueChip=p=>{if(!p.due_date||p.approval!=='Pending'||p.status==='Posted')return '';const td=iso(new Date()),late=p.due_date<td,now=p.due_date===td;const d=new Date(p.due_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});return `<span class="badge" style="background:${late||now?'#fde2e2':'#fff3d6'};color:${late||now?'#8a1f1f':'#6a4a00'}">${late?'Overdue, was due ':now?'Due today \u00b7 ':'Please approve by '}${esc(d)}</span>`;};
 function needsBanner(){if(!posts.length)return '';const all=posts.filter(p=>p.approval==='Pending'),n=all.length;
   if(!n){const ch=posts.filter(p=>p.approval==='Changes requested').length;return `<div class="nb done" role="status"><div style="font-size:40px;line-height:1">🎉</div><div><b>You're all caught up!</b><div style="color:var(--mute);font-size:14px">Nothing is waiting for your approval.${ch?' '+ch+(ch===1?' post is':' posts are')+' with your social media manager for changes.':''}</div></div></div>`;}
-  const dated=all.filter(p=>p.post_date),nx=dated.length?dated.slice().sort((a,b)=>a.post_date.localeCompare(b.post_date))[0]:all[0];
-  return `<div class="nb" role="status"><div><b>${n} post${n===1?'':'s'} need${n===1?'s':''} your approval</b>${nx.post_date?`<div style="color:var(--mute);font-size:14px">The next one goes live ${rel(nx.post_date)}.</div>`:''}</div><button class="p go" id="gonx" data-i="${posts.indexOf(nx)}">Review the next one</button></div>`;}
+  const du=all.filter(p=>p.due_date).map(p=>p.due_date).sort()[0],dated=all.filter(p=>p.post_date),nx=dated.length?dated.slice().sort((a,b)=>a.post_date.localeCompare(b.post_date))[0]:all[0];
+  return `<div class="nb" role="status"><div><b>${n} post${n===1?'':'s'} need${n===1?'s':''} your approval</b>${nx.post_date?`<div style="color:var(--mute);font-size:14px">The next one goes live ${rel(nx.post_date)}.</div>`:''}${du?`<div style="color:var(--mute);font-size:14px">${du<iso(new Date())?'Some approvals are overdue.':'Earliest deadline: '+esc(new Date(du+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}))}</div>`:''}</div><button class="p go" id="gonx" data-i="${posts.indexOf(nx)}">Review the next one</button></div>`;}
 const akey=()=>'<div class="legend"><span class="sb b-Pending">To approve</span><span class="sb b-Approved">Approved</span><span class="sb b-Changes">You asked for changes</span></div>';
 function flash(v){if(v!=='Approved')return;let f=document.getElementById('flash');if(!f){f=document.createElement('div');f.id='flash';f.setAttribute('aria-hidden','true');f.textContent='✓';document.body.appendChild(f);}f.className='';void f.offsetWidth;f.className='go';setTimeout(()=>{f.className='';},1000);}
 let selDay=null;
@@ -919,6 +926,7 @@ function applyBrand(){const r=document.documentElement.style;document.body.class
   else{r.removeProperty('--acc');r.removeProperty('--accink');}}
 function checks(p){const td=iso(new Date()),a=[],done=p.status==='Posted';
   if(p.approval==='Changes requested')a.push('Client asked for changes');
+  if(p.due_date&&p.approval==='Pending'&&p.due_date<td&&!done)a.push('Approval overdue');
   if(!p.caption&&!done)a.push('No caption');
   if(!p.post_time&&!done)a.push('No time set');
   if(p.status==='Scheduled'&&p.approval!=='Approved')a.push('Scheduled without client approval');
@@ -991,6 +999,7 @@ async function postForm(p={}){
   <div><label>Format</label><select name="format">${opts(FORMATS,p.format)}</select></div>
   <div><label>Status</label><select name="status">${(()=>{const L=stList();return opts(p.status&&!L.includes(p.status)?[...L,p.status]:L,p.status||'Draft');})()}</select></div>
   <div><label>Client approval</label><select name="approval">${opts(APPR,p.approval||'Pending')}</select></div>
+  <div><label>Approval due (optional)</label><input name="due_date" type="date" value="${p.due_date||''}"></div>
   <div><label>Campaign / promo</label><input name="campaign" value="${esc(p.campaign)}"></div></div>
   <label>Post copy / caption</label><textarea name="caption" rows="4">${esc(p.caption)}</textarea>
   <label>Visual / photo (paste a Google Drive link)</label><input name="visual" value="${esc(p.visual)}" placeholder="https://drive.google.com/...">
@@ -1003,6 +1012,7 @@ async function postForm(p={}){
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
   <div id="upx"></div>
   <div id="cmx"></div>
+  ${p.id?'<details id="vsn" style="margin-top:10px"><summary>Caption versions</summary><div id="vsb"></div></details>':''}
   ${p.id?'<details id="hst" style="margin-top:10px"><summary>History</summary><div id="hsb"></div></details>':''}
   <p class="err" id="pe"></p>
   <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button><button type="button" id="dup">Duplicate</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
@@ -1017,14 +1027,15 @@ async function postForm(p={}){
   const updMn=()=>{const f=$('#pf');$('#mn').textContent=f.post_time.value&&f.post_date.value?'Manila: '+toManila(f.post_date.value,f.post_time.value,TZ):'';};
   $('#pf').repost.onchange=updRp;$('#pf').post_date.onchange=()=>{updRp();updMn();};$('#pf').post_time.onchange=updMn;updRp();updMn();
   if($('#hs')) $('#hs').onchange=e=>{const h=hsets.find(x=>x.id===e.target.value);if(h){const i=$('#pf').hashtags;i.value=(i.value.trim()?i.value.trim()+' ':'')+h.tags;}e.target.value='';};
-  if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
-  if(p.id) $('#dup').onclick=()=>{d.close();postForm({...p,id:undefined,status:'Draft',approval:'Pending',approved_by:null,approved_on:null,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
+  if(p.id) $('#rp').onclick=()=>{d.close();postForm({...p,id:undefined,post_date:p.post_date?addDays(p.post_date,GAP):'',status:'Draft',approval:'Pending',approved_by:null,approved_on:null,due_date:null,repost:false,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
+  if(p.id) $('#dup').onclick=()=>{d.close();postForm({...p,id:undefined,status:'Draft',approval:'Pending',approved_by:null,approved_on:null,due_date:null,live_link:null,reach:null,likes:null,comments_count:null,shares_saves:null,dms_inquiries:null,link_clicks:null,engagements:null});};
   if(p.id) showComments(p.id,'#cmx',true);
   if(p.id) mediaUI('#upx',p,true);
   if(p.id&&$('#hst')) $('#hst').addEventListener('toggle',()=>{if($('#hst').open)showHistory(p.id);});
+  if(p.id&&$('#vsn')) $('#vsn').addEventListener('toggle',()=>{if($('#vsn').open)showVersions(p.id);});
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const f=Object.fromEntries(new FormData(e.target));
-    f.post_time=f.post_time||null;f.client_id=cid;
+    f.post_time=f.post_time||null;f.due_date=f.due_date||null;f.client_id=cid;
     M.forEach(([k])=>{f[k]=(f[k]===''||f[k]==null)?null:+f[k];});
     f.repost=f.repost==='on';
     if(f.approval!==p.approval&&f.approval==='Pending'){f.approved_by=null;f.approved_on=null;}
@@ -1071,19 +1082,91 @@ function settingsForm(){
     d.close();await loadPosts();adminView();};
   d.showModal();
 }
+let cmDraft={pid:null,text:'',vis:'client',pin:null};
+const pinImg=()=>document.querySelector('#cm .pimg')||document.querySelector('#pvw .pimg');
+function pinWrap(img){let w=img.parentNode;if(w&&w.classList&&w.classList.contains('pinwrap'))return w;w=document.createElement('div');w.className='pinwrap';img.parentNode.insertBefore(w,img);w.appendChild(img);return w;}
+function drawPins(list,pending){
+  const img=pinImg();if(!img)return null;const w=pinWrap(img);
+  w.querySelectorAll('.pin').forEach(x=>x.remove());
+  const mk=(x,y,txt,cls)=>{const b=document.createElement('button');b.type='button';b.className='pin '+cls;b.style.left=(x*100)+'%';b.style.top=(y*100)+'%';b.textContent=txt;w.appendChild(b);return b;};
+  list.forEach((c,i)=>{const b=mk(+c.pin_x,+c.pin_y,String(i+1),c.resolved?'done':'');b.setAttribute('aria-label','Comment '+(i+1));
+    b.onclick=ev=>{ev.stopPropagation();const el=document.querySelector('.cm[data-cid="'+c.id+'"]');if(el){el.scrollIntoView({block:'nearest',behavior:'smooth'});el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1400);}};});
+  if(pending)mk(pending.x,pending.y,'+','tmp');
+  return w;
+}
 async function showComments(pid,sel,isAdm){
+  if(!$(sel))return;
+  window.__cmCtx={pid,sel,isAdm};
   const {data}=await sb.from('comments').select('*').eq('post_id',pid).order('created_at');
-  const list=(data||[]).map(c=>{const int=c.visibility==='internal';
-    return `<div class="cm${c.resolved?' done':''}"${int?' style="background:#fff7e0;border-left:3px solid #c28a00;padding-left:8px;color:#1d2030"':''}>${int?'<small><b>Internal only</b></small><br>':''}${c.resolved?'<small><b>\u2713 Resolved</b></small><br>':''}${esc(c.body)}<br><small>${new Date(c.created_at).toLocaleString()}${c.author_id===user.id?' \u00b7 you':''}</small>${isAdm?` <button type="button" class="rs" data-c="${c.id}" data-r="${c.resolved?1:0}" style="min-height:0;padding:2px 10px;font-size:12px;margin-left:8px">${c.resolved?'Reopen':'Resolve'}</button>`:''}</div>`;}).join('')||'<div class="cm"><small>No comments yet.</small></div>';
+  if(!$(sel))return;
+  const all=data||[],pinned=all.filter(c=>c.pin_x!=null&&c.pin_y!=null),num=new Map(pinned.map((c,i)=>[c.id,i+1]));
+  if(cmDraft.pid!==pid)cmDraft={pid,text:'',vis:'client',pin:null};
+  const hasImg=!!pinImg();
+  const list=all.map(c=>{const int=c.visibility==='internal';
+    return `<div class="cm${c.resolved?' done':''}" data-cid="${c.id}"${int?' style="background:#fff7e0;border-left:3px solid #c28a00;padding-left:8px;color:#1d2030"':''}>${num.has(c.id)?`<small><b>\ud83d\udccd ${num.get(c.id)}</b></small> `:''}${int?'<small><b>Internal only</b></small><br>':''}${c.resolved?'<small><b>\u2713 Resolved</b></small><br>':''}${esc(c.body)}<br><small>${new Date(c.created_at).toLocaleString()}${c.author_id===user.id?' \u00b7 you':''}</small>${isAdm?` <button type="button" class="rs" data-c="${c.id}" data-r="${c.resolved?1:0}" style="min-height:0;padding:2px 10px;font-size:12px;margin-left:8px">${c.resolved?'Reopen':'Resolve'}</button>`:''}</div>`;}).join('')||'<div class="cm"><small>No comments yet.</small></div>';
   $(sel).innerHTML=`<h3 style="margin-bottom:4px">Comments</h3>${list}
-  <div class="row" style="margin-top:8px"><input id="cin" placeholder="${isAdm?'Write a comment or internal note':'Write a comment'}" style="flex:1">${isAdm?'<select id="cvis" style="width:auto" aria-label="Who can see this"><option value="client">Visible to client</option><option value="internal">Internal only</option></select>':''}<button type="button" id="cad">Add comment</button></div>`;
+  <div class="row" style="margin-top:8px"><input id="cin" placeholder="${isAdm?'Write a comment or internal note':'Write a comment'}" style="flex:1" value="${esc(cmDraft.text)}">${isAdm?`<select id="cvis" style="width:auto" aria-label="Who can see this"><option value="client"${cmDraft.vis==='client'?' selected':''}>Visible to client</option><option value="internal"${cmDraft.vis==='internal'?' selected':''}>Internal only</option></select>`:''}${hasImg?'<button type="button" id="cpn"></button>':''}<button type="button" id="cad">Add comment</button></div><div id="cph" style="font-size:13px;color:var(--mute);margin-top:4px"></div>`;
+  let pinMode=false;
+  const w=drawPins(pinned,cmDraft.pin);
+  const paint=()=>{const b=$('#cpn');if(b)b.textContent=cmDraft.pin?'\ud83d\udccd Pinned \u00b7 remove':pinMode?'Cancel pin':'\ud83d\udccd Pin to image';
+    const h=$('#cph');if(h)h.textContent=pinMode?'Tap the spot on the image where your comment belongs.':cmDraft.pin?'Pinned. Now write your comment.':'';
+    if(w)w.classList.toggle('pinning',pinMode);drawPins(pinned,cmDraft.pin);};
+  paint();
+  if($('#cin'))$('#cin').oninput=e=>{cmDraft.text=e.target.value;};
+  if($('#cvis'))$('#cvis').onchange=e=>{cmDraft.vis=e.target.value;};
+  if($('#cpn'))$('#cpn').onclick=()=>{
+    if(cmDraft.pin){cmDraft.pin=null;pinMode=false;return paint();}
+    pinMode=!pinMode;
+    if(pinMode&&isAdm){const dt=$('#pvw')&&$('#pvw').closest('details');if(dt)dt.open=true;}
+    paint();};
+  if(w)w.onclick=ev=>{if(!pinMode||ev.target.closest('.pin'))return;const img=pinImg();if(!img)return;const r=img.getBoundingClientRect();
+    const cl=v=>Math.min(1,Math.max(0,v));
+    cmDraft.pin={x:+cl((ev.clientX-r.left)/(r.width||1)).toFixed(4),y:+cl((ev.clientY-r.top)/(r.height||1)).toFixed(4)};
+    pinMode=false;paint();if($('#cin'))$('#cin').focus();};
   document.querySelectorAll(sel+' .rs').forEach(b=>b.onclick=async()=>{const r=await sb.from('comments').update({resolved:b.dataset.r!=='1'}).eq('id',b.dataset.c);if(r.error)return alert('Could not update: '+r.error.message);showComments(pid,sel,isAdm);});
   $('#cad').onclick=async()=>{const b=$('#cin').value.trim();if(!b)return;
     const vis=isAdm&&$('#cvis')?$('#cvis').value:'client';
-    const r=await sb.from('comments').insert({post_id:pid,author_id:user.id,body:b,visibility:vis});
+    const row={post_id:pid,author_id:user.id,body:b,visibility:vis};
+    if(cmDraft.pin){row.pin_x=cmDraft.pin.x;row.pin_y=cmDraft.pin.y;}
+    const r=await sb.from('comments').insert(row);
     if(r.error) return alert('Could not add comment: '+r.error.message);
+    cmDraft={pid,text:'',vis:isAdm?vis:'client',pin:null};
     showComments(pid,sel,isAdm);};
 }
+async function showVersions(pid){const b=$('#vsb');if(!b)return;b.textContent='Loading\u2026';
+  const r=await sb.from('post_versions').select('*').eq('post_id',pid).order('changed_at',{ascending:false}).order('id',{ascending:false});
+  if(r.error){b.textContent='Could not load versions: '+r.error.message;return;}
+  const rows=r.data||[];
+  if(rows.length<2){b.innerHTML='<div class="cm"><small>No earlier versions yet. Changes to the caption or hashtags will appear here.</small></div>';return;}
+  b.innerHTML=rows.map((v,i)=>`<div class="cm"><small>${i===0?'<b>Current</b> \u00b7 ':''}${esc(new Date(v.changed_at).toLocaleString())} \u00b7 ${v.changed_by?(v.changed_by===user.id?'you':'someone else'):'starting version'}</small><div style="white-space:pre-wrap">${esc((v.caption||'(no caption)').slice(0,400))}</div>${v.hashtags?`<small>${esc(v.hashtags)}</small>`:''}${i===0?'':`<div><button type="button" class="uvv" data-i="${i}" style="min-height:0;padding:2px 10px;font-size:12px">Use this version</button></div>`}</div>`).join('');
+  b.querySelectorAll('.uvv').forEach(btn=>btn.onclick=()=>{const v=rows[+btn.dataset.i],f=$('#pf');if(!f)return;
+    f.caption.value=v.caption||'';f.hashtags.value=v.hashtags||'';
+    ['caption','hashtags'].forEach(n=>f[n].dispatchEvent(new Event('input',{bubbles:true})));
+    toast('Version loaded. Press Save post to keep it.');});
+}
+/* ---- live updates (admin: posts + comments; client: comments). The database decides who receives what. ---- */
+let liveCh=null,livePending=false,liveTimer=null,liveBound=false;
+const liveName=id=>((clients.find(c=>c.id===id))||{}).name||'A client';
+function stopLive(){if(liveCh){try{sb.removeChannel(liveCh);}catch(e){}liveCh=null;}}
+function liveRefresh(){clearTimeout(liveTimer);liveTimer=setTimeout(async()=>{
+  if(!me)return;const d=$('#dlg');if(d&&d.open){livePending=true;return;}
+  await loadPosts();me.role==='admin'?adminView():clientView();},700);}
+function onLivePost(pl){const n=pl.new||{};if(!n.id)return;const loc=posts.find(p=>p.id===n.id);
+  if(pl.eventType==='UPDATE'&&loc&&n.approval&&loc.approval!==n.approval&&n.approval!=='Pending')
+    toast(liveName(n.client_id)+': '+(n.platform||'post')+(n.post_date?' on '+n.post_date:'')+' \u2192 '+n.approval);
+  if(n.client_id!==cid)return;
+  if(loc&&['approval','status','post_date','post_time','caption','visual'].every(k=>loc[k]===n[k]))return;
+  liveRefresh();}
+function onLiveComment(pl){const n=pl.new||{};if(!n.id||n.author_id===(user&&user.id))return;
+  const pc=posts.find(p=>p.id===n.post_id);
+  toast((me.role==='admin'?liveName(pc&&pc.client_id):'Your social media manager')+' commented'+(pc?' on the '+pc.platform+' post'+(pc.post_date?' for '+pc.post_date:''):''));
+  const c=window.__cmCtx;if(c&&c.pid===n.post_id&&$(c.sel))showComments(c.pid,c.sel,c.isAdm);
+  if(me.role==='admin')liveRefresh();}
+function startLive(){stopLive();if(!me||!sb.channel)return;
+  if(!liveBound){const d=$('#dlg');if(d){d.addEventListener('close',()=>{if(livePending){livePending=false;liveRefresh();}});liveBound=true;}}
+  let ch=sb.channel('live-'+me.role).on('postgres_changes',{event:'INSERT',schema:'public',table:'comments'},onLiveComment);
+  if(me.role==='admin')ch=ch.on('postgres_changes',{event:'*',schema:'public',table:'posts'},onLivePost);
+  liveCh=ch.subscribe();}
 const MIME_BY_EXT={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime'};
 const waitMs=ms=>new Promise(r=>setTimeout(r,ms));
 async function mediaUI(sel,p,isAdm){
@@ -1169,7 +1252,7 @@ function clientView(){
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
   m.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><button id="pv"${idx===0?' disabled':''}>‹ Previous</button><button id="lv">All posts</button><button id="cvb">Calendar</button><button id="fvb">Feed</button><span>Post ${idx+1} of ${posts.length}</span><button id="nx"${idx===posts.length-1?' disabled':''}>Next ›</button></div>
   <div class="card"><div class="row"><span class="badge b-${k}">${k==='Pending'?'Waiting for your approval':k==='Approved'?'Approved':'You asked for changes'}</span>
-  <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(t12(p.post_time)):''}</span></div>
+  <span style="color:var(--mute)">${esc(p.platform)} · ${esc(when)}${p.post_time?' at '+esc(t12(p.post_time)):''}</span>${dueChip(p)}</div>
   ${postCard(p)}
   ${p.post_date&&p.status!=='Posted'?`<p style="text-align:center;color:var(--mute);margin:0 0 8px">Goes live ${esc(rel(p.post_date))} · ${esc(when)}${p.post_time?' at '+esc(t12(p.post_time)):''}</p>`:''}
   ${p.status==='Posted'?'<p style="text-align:center;color:var(--mute);margin:8px 0">This post is already live.</p>':`<div class="row stickybar"><button class="p big" id="ap">Approve</button><button class="bad big" id="rc">Request changes</button></div>`}
