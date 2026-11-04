@@ -906,13 +906,13 @@ async function ideasForm(){
   const d=$('#dlg');const cname=(clients.find(c=>c.id===cid)||{}).name||'';
   const r=await sb.from('ideas').select('*').eq('client_id',cid).order('created_at',{ascending:false});
   if(r.error){alert('Could not load ideas: '+r.error.message);return;}
-  const all=r.data||[],list=ideaFlt==='All'?all:ideaFlt==='From client'?all.filter(i=>i.source==='client'):all.filter(i=>i.status===ideaFlt);
+  const all=r.data||[],list=(ideaFlt==='All'?all:ideaFlt==='From client'?all.filter(i=>i.source==='client'):all.filter(i=>i.status===ideaFlt)).slice().sort(ideaSort);
   const med={},cids=all.filter(i=>i.source==='client').map(i=>i.id);
   if(cids.length){const mr=await sb.from('post_media').select('idea_id,status,file_name,mime_type,drive_file_id,drive_link').in('idea_id',cids).order('created_at');(mr.data||[]).forEach(x=>(med[x.idea_id]=med[x.idea_id]||[]).push(x));}
   const firstLink=i=>((med[i.id]||[]).find(x=>x.status==='done'&&x.drive_link)||{}).drive_link||'';
   d.innerHTML=`<h2 style="margin-top:0">Ideas Bank: ${esc(cname)}</h2>
   <div class="row"><select id="if" style="width:auto" aria-label="Filter ideas">${['Idea','Planned','Used','From client','All'].map(f=>`<option${f===ideaFlt?' selected':''}>${f}</option>`).join('')}</select><span style="color:var(--mute)">${list.length} shown</span></div>
-  ${list.map(i=>`<div class="cm"><b>${esc(i.title)}</b>${i.source==='client'?' <span class="badge b-Pending" style="margin-left:6px">From client</span>':''}<div style="color:var(--mute);font-size:13px">${[i.pillar,i.platform].filter(Boolean).map(esc).join(' · ')}</div>${i.notes?`<div style="white-space:pre-wrap">${esc(i.notes)}</div>`:''}${i.source==='client'?ideaExtras(i,med[i.id]||[]):''}
+  ${list.map(i=>`<div class="cm"><b>${esc(i.title)}</b>${i.source==='client'?' <span class="badge b-Pending" style="margin-left:6px">From client</span>':''}<div style="color:var(--mute);font-size:13px">${[i.pillar,i.platform].filter(Boolean).map(esc).join(' · ')}</div>${ideaMetaHtml(i)}${i.source==='client'?ideaExtras(i,med[i.id]||[]):''}
   <div class="row" style="margin-top:4px"><button type="button" class="p" data-m="${i.id}">Make post</button><select data-s="${i.id}" style="width:auto" aria-label="Idea status">${['Idea','Planned','Used'].map(x=>`<option${x===i.status?' selected':''}>${x}</option>`).join('')}</select><button type="button" class="bad" data-d="${i.id}">Delete</button></div></div>`).join('')||'<p style="color:var(--mute)">Nothing here yet.</p>'}
   <form id="idf" style="margin-top:12px"><h3 style="margin:0">New idea</h3>
   <label>Idea</label><input name="t" required placeholder="e.g. Before and after client story">
@@ -928,7 +928,7 @@ async function ideasForm(){
   d.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this idea?'))return;await sb.from('ideas').delete().eq('id',b.dataset.d);ideasForm();});
   d.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{const i=all.find(x=>x.id===b.dataset.m);
     await sb.from('ideas').update({status:'Planned'}).eq('id',i.id);
-    d.close();postForm({platform:i.platform||undefined,pillar:i.pillar||undefined,caption:i.source==='client'?(i.notes||i.title):i.title+(i.notes?'\n'+i.notes:''),visual:firstLink(i)||undefined,status:'Draft'});});
+    d.close();postForm({platform:i.platform||undefined,pillar:i.pillar||undefined,caption:i.source==='client'?(ideaMeta(i).text||i.title):i.title+(i.notes?'\n'+i.notes:''),visual:firstLink(i)||undefined,status:'Draft'});});
   d.querySelectorAll('[data-rs]').forEach(b=>b.onclick=async()=>{const t=d.querySelector('[data-rt="'+b.dataset.rs+'"]').value.trim();const w=await sb.from('ideas').update({reply:t||null}).eq('id',b.dataset.rs);if(w.error)return alert('Could not save: '+w.error.message);toast(t?'Reply sent.':'Reply removed.');});
   $('#idf').onsubmit=async ev=>{ev.preventDefault();
     const f=Object.fromEntries(new FormData(ev.target));
@@ -1000,6 +1000,35 @@ function pwForm(welcome){const d=$('#dlg');
     const r=await sb.auth.updateUser({password:f.a});
     if(r.error) return $('#we').textContent='Could not change it: '+r.error.message;
     d.close();alert('Password changed.');};}
+function zUtc(ds,tm,tz){const [y,mo,d]=ds.split('-').map(Number),[h,mi]=tm.slice(0,5).split(':').map(Number);
+  const off=t=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(new Date(t)).reduce((a,x)=>(a[x.type]=x.value,a),{});return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute,+p.second)-t;};
+  const base=Date.UTC(y,mo-1,d,h,mi);let u=base-off(base);u=base-off(u);return new Date(u);}
+function icsFile(evts,name){
+  const e=t=>String(t||'').replace(/\\/g,'\\\\').replace(/[,;]/g,'\\$&').replace(/\r?\n/g,'\\n'),d8=t=>t.replace(/-/g,''),fz=dt=>dt.toISOString().replace(/[-:]|\.\d+/g,''),st=fz(new Date());
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Content Calendar//EN','CALSCALE:GREGORIAN'];
+  evts.forEach(v=>{L.push('BEGIN:VEVENT','UID:'+v.uid,'DTSTAMP:'+st);
+    if(v.time){let a;try{a=zUtc(v.date,v.time,TZ);}catch(x){a=null;}
+      if(a)L.push('DTSTART:'+fz(a),'DTEND:'+fz(new Date(a.getTime()+30*60000)));
+      else L.push('DTSTART;TZID='+TZ+':'+d8(v.date)+'T'+v.time.slice(0,5).replace(':','')+'00');}
+    else L.push('DTSTART;VALUE=DATE:'+d8(v.date),'DTEND;VALUE=DATE:'+d8(addDays(v.date,1)));
+    L.push('SUMMARY:'+e(v.summary),'DESCRIPTION:'+e(v.desc),'END:VEVENT');});
+  L.push('END:VCALENDAR');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar;charset=utf-8'}));
+  a.download=(name||'calendar').replace(/[^\w-]+/g,'_')+'.ics';document.body.appendChild(a);a.click();a.remove();}
+function icsDialog(){
+  const td=iso(new Date()),apr={Pending:'Waiting for your approval',Approved:'Approved','Changes requested':'You asked for changes'};
+  const up=posts.filter(p=>p.post_date&&p.post_date>=td&&p.status!=='Posted'),wk=up.filter(p=>p.post_date<=addDays(td,6)),
+    dl=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted'&&p.due_date&&p.due_date>=td);
+  const post=p=>({uid:p.id+'@content-calendar',date:p.post_date,time:p.post_time,summary:(p.platform||'Post')+' post goes live'+(p.caption?': '+p.caption.replace(/\s+/g,' ').slice(0,40)+(p.caption.length>40?'\u2026':''):''),
+    desc:[p.caption,p.hashtags,apr[p.approval]||''].filter(Boolean).join('\n\n')});
+  const dead=p=>({uid:p.id+'-approve@content-calendar',date:p.due_date,summary:'Approve the '+(p.platform||'')+' post for '+p.post_date,desc:'Please review and approve this post in your content calendar.'});
+  const d=$('#dlg');
+  d.innerHTML=`<h2 style="margin-top:0">Add to my calendar</h2><p style="color:var(--mute);margin-top:0">This downloads a calendar file. Open it and Google Calendar, Apple Calendar or Outlook will offer to add the events. On a computer with Google Calendar, use Settings, then Import.</p>
+  <div style="display:grid;gap:8px"><button type="button" class="p" id="ic1"${up.length?'':' disabled'}>All upcoming posts (${up.length})</button><button type="button" id="ic2"${wk.length?'':' disabled'}>Only the next 7 days (${wk.length})</button>${dl.length?`<button type="button" id="ic3">Approval deadlines (${dl.length})</button>`:''}</div>
+  <div class="row" style="margin-top:12px"><button type="button" id="icx" style="margin-left:auto">Close</button></div>`;
+  d.showModal();$('#icx').onclick=()=>d.close();
+  const go=(list,fn,nm)=>()=>{if(!list.length)return;icsFile(list.map(fn),(CNAME||'calendar')+'_'+nm);d.close();toast('Calendar file downloaded.');};
+  $('#ic1').onclick=go(up,post,'upcoming_posts');$('#ic2').onclick=go(wk,post,'next_7_days');if($('#ic3'))$('#ic3').onclick=go(dl,dead,'approval_deadlines');}
 function exportIcs(){
   const ps=posts.filter(p=>p.post_date);if(!ps.length)return alert('No posts to export.');
   const e=t=>String(t||'').replace(/\\/g,'\\\\').replace(/[,;]/g,'\\$&').replace(/\r?\n/g,'\\n'),d8=t=>t.replace(/-/g,''),st=new Date().toISOString().replace(/[-:]|\.\d+/g,'');
@@ -1146,6 +1175,8 @@ function drawPins(list,pending){
   if(pending)mk(pending.x,pending.y,'+','tmp');
   return w;
 }
+const QR=['Looks good','Can we use a different photo?','Please check the date','Can you change the wording?','Thank you!'];
+const qrHtml=()=>`<div class="qr" role="group" aria-label="Quick replies">${QR.map(t=>`<button type="button" class="qrc">${esc(t)}</button>`).join('')}</div>`;
 async function showComments(pid,sel,isAdm){
   if(!$(sel))return;
   window.__cmCtx={pid,sel,isAdm};
@@ -1157,7 +1188,7 @@ async function showComments(pid,sel,isAdm){
   const list=all.map(c=>{const int=c.visibility==='internal';
     return `<div class="cm${c.resolved?' done':''}" data-cid="${c.id}"${int?' style="background:#fff7e0;border-left:3px solid #c28a00;padding-left:8px;color:#1d2030"':''}>${num.has(c.id)?`<small><b>\ud83d\udccd ${num.get(c.id)}</b></small> `:''}${int?'<small><b>Internal only</b></small><br>':''}${c.resolved?'<small><b>\u2713 Resolved</b></small><br>':''}<span class="cbody">${esc(c.body)}</span><br><small>${new Date(c.created_at).toLocaleString()}${c.author_id===user.id?' \u00b7 you':''}</small>${isAdm?` <button type="button" class="rs" data-c="${c.id}" data-r="${c.resolved?1:0}" style="min-height:0;padding:2px 10px;font-size:12px;margin-left:8px">${c.resolved?'Reopen':'Resolve'}</button>`:''}</div>`;}).join('')||'<div class="cm"><small>No comments yet.</small></div>';
   $(sel).innerHTML=`<h3 style="margin-bottom:4px">Comments</h3>${list}
-  <div class="row" style="margin-top:8px"><input id="cin" placeholder="${isAdm?'Write a comment or internal note':'Write a comment'}" style="flex:1" value="${esc(cmDraft.text)}">${isAdm?`<select id="cvis" style="width:auto" aria-label="Who can see this"><option value="client"${cmDraft.vis==='client'?' selected':''}>Visible to client</option><option value="internal"${cmDraft.vis==='internal'?' selected':''}>Internal only</option></select>`:''}${hasImg?'<button type="button" id="cpn"></button>':''}<button type="button" id="cad">Add comment</button></div><div id="cph" style="font-size:13px;color:var(--mute);margin-top:4px"></div>`;
+  ${isAdm?'':qrHtml()}<div class="row" style="margin-top:8px"><input id="cin" placeholder="${isAdm?'Write a comment or internal note':'Write a comment'}" style="flex:1" value="${esc(cmDraft.text)}">${isAdm?`<select id="cvis" style="width:auto" aria-label="Who can see this"><option value="client"${cmDraft.vis==='client'?' selected':''}>Visible to client</option><option value="internal"${cmDraft.vis==='internal'?' selected':''}>Internal only</option></select>`:''}${hasImg?'<button type="button" id="cpn"></button>':''}<button type="button" id="cad">Add comment</button></div><div id="cph" style="font-size:13px;color:var(--mute);margin-top:4px"></div>`;
   let pinMode=false;
   const w=drawPins(pinned,cmDraft.pin);
   const paint=()=>{const b=$('#cpn');if(b)b.textContent=cmDraft.pin?'\ud83d\udccd Pinned \u00b7 remove':pinMode?'Cancel pin':'\ud83d\udccd Pin to image';
@@ -1165,6 +1196,7 @@ async function showComments(pid,sel,isAdm){
     if(w)w.classList.toggle('pinning',pinMode);drawPins(pinned,cmDraft.pin);};
   paint();
   if($('#cin'))$('#cin').oninput=e=>{cmDraft.text=e.target.value;};
+  document.querySelectorAll(sel+' .qrc').forEach(b=>b.onclick=()=>{const c=$('#cin');if(!c)return;const v=c.value.trim();c.value=v?v+' '+b.textContent:b.textContent;cmDraft.text=c.value;const a=$('#cad');if(a)a.classList.add('p');});
   if($('#cvis'))$('#cvis').onchange=e=>{cmDraft.vis=e.target.value;};
   if($('#cpn'))$('#cpn').onclick=()=>{
     if(cmDraft.pin){cmDraft.pin=null;pinMode=false;return paint();}
@@ -1185,7 +1217,17 @@ async function showComments(pid,sel,isAdm){
     cmDraft={pid,text:'',vis:isAdm?vis:'client',pin:null};
     showComments(pid,sel,isAdm);};
 }
-let newIdeas=0,ideaDraft={note:'',files:[]};
+const IDEA_KINDS=['Event','Promotion','Photo','Question'];
+const ideaTag=(k,d)=>{const a=[k||'',d?'needed by '+d:''].filter(Boolean).join(' | ');return a?'['+a+']':'';};
+function ideaMeta(i){const n=String((i&&i.notes)||''),m=n.match(/^\[(?:(Event|Promotion|Photo|Question|Other)(?:\s*\|\s*)?)?(?:needed by (\d{4}-\d{2}-\d{2}))?\]\n?/);
+  return m?{kind:m[1]||'',by:m[2]||'',text:n.slice(m[0].length)}:{kind:'',by:'',text:n};}
+const ideaSort=(a,b)=>{const ka=a.status==='Idea'?0:1,kb=b.status==='Idea'?0:1;if(ka!==kb)return ka-kb;
+  const da=ideaMeta(a).by||'9999-12-31',db=ideaMeta(b).by||'9999-12-31';return da<db?-1:da>db?1:0;};
+function ideaMetaHtml(i){const m=ideaMeta(i);let h='';
+  if(m.kind||m.by){const td=iso(new Date()),act=i.status==='Idea',late=!!m.by&&m.by<td&&act,soon=!!m.by&&!late&&m.by<=addDays(td,3)&&act;
+    h+=`<div class="ideam">${m.kind?`<span class="badge ik">${esc(m.kind)}</span>`:''}${m.by?`<span class="badge ${late||soon?'b-Changes':'b-Pending'}">${late?'Was needed by ':'Needed by '}${esc(new Date(m.by+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'}))}</span>`:''}</div>`;}
+  return h+(m.text?`<div style="white-space:pre-wrap;margin:6px 0">${esc(m.text)}</div>`:'');}
+let newIdeas=0,ideaDraft={note:'',files:[],kind:'',by:''};
 async function refreshIdeaCount(){if(!me||me.role!=='admin'||!cid)return;const r=await sb.from('ideas').select('id',{count:'exact',head:true}).eq('client_id',cid).eq('source','client').eq('status','Idea');newIdeas=r.count||0;}
 async function sendMedia(files,targetId,msg){let ok=0;
   for(const f of files){
@@ -1205,18 +1247,20 @@ function ideaThumbs(arr){return arr.length?`<div class="ith">${arr.map(x=>x.stat
 function ideaExtras(i,arr){return ideaThumbs(arr)+`<div style="margin-top:6px"><label style="font-size:13px">Reply to the client (they will see this)</label><textarea data-rt="${i.id}" rows="2">${esc(i.reply||'')}</textarea><button type="button" data-rs="${i.id}" style="min-height:0;padding:4px 12px">Send reply</button></div>`;}
 async function ideaBank(m){
   const r=await sb.from('ideas').select('*').eq('source','client').order('created_at',{ascending:false});
-  const list=r.data||[],ids=list.map(i=>i.id),med={};
+  const list=(r.data||[]).slice().sort(ideaSort),ids=list.map(i=>i.id),med={};
   if(ids.length){const mr=await sb.from('post_media').select('idea_id,status,file_name,mime_type,drive_file_id,drive_link').in('idea_id',ids).order('created_at');(mr.data||[]).forEach(x=>(med[x.idea_id]=med[x.idea_id]||[]).push(x));}
   const lbl={Idea:'With your social media manager',Planned:'Planned \u2713',Used:'Used in a post'};
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="cvb3">Calendar</button><button id="fvb3">Feed</button></div>
   <div class="card"><h2 style="margin-top:0">\ud83d\udca1 Idea bank</h2><p style="color:var(--mute);margin-top:0">Got a photo, an offer, an event or a story you would like to see on your page? Drop it here and your social media manager will see it.</p>
   <textarea id="ibn" rows="3" placeholder="What is the idea? For example: new window display, share it on Friday">${esc(ideaDraft.note)}</textarea>
+  <div class="ibk" role="group" aria-label="What kind of idea is it?">${IDEA_KINDS.map(k=>`<button type="button" class="ibkb${ideaDraft.kind===k?' on':''}" data-k="${k}" aria-pressed="${ideaDraft.kind===k}">${k}</button>`).join('')}</div>
+  <label for="ibd" style="margin-top:8px">Needed by (optional)</label><input type="date" id="ibd" min="${iso(new Date())}" value="${esc(ideaDraft.by||'')}">
   <div class="ibp" id="ibp"></div>
   <div class="row" style="margin-top:8px"><button type="button" id="ibf">\ud83d\udcf7 Add photos or videos</button><input type="file" id="ibi" accept="image/*,video/*" multiple hidden><button type="button" class="p" id="ibs">Save idea</button></div>
   <div id="ibm" role="status" style="margin-top:6px;color:var(--mute);font-size:13px"></div></div>
   <h3 style="margin:16px 0 6px">Your ideas</h3>
   ${list.map(i=>`<div class="card" data-iid="${i.id}"><div class="row" style="justify-content:space-between"><small style="color:var(--mute)">${esc(new Date(i.created_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}))}</small><span class="badge ${i.status==='Idea'?'b-Pending':'b-Approved'}">${esc(lbl[i.status]||i.status)}</span></div>
-    ${i.notes?`<div style="white-space:pre-wrap;margin:6px 0">${esc(i.notes)}</div>`:''}${ideaThumbs(med[i.id]||[])}
+    ${ideaMetaHtml(i)}${ideaThumbs(med[i.id]||[])}
     ${i.reply?`<div class="cm" style="margin-top:8px"><small><b>From your social media manager</b></small><br>${esc(i.reply)}</div>`:''}
     ${i.status==='Idea'?`<div class="row" style="margin-top:8px"><button type="button" data-ad="${i.id}">Add photos</button><button type="button" data-ed="${i.id}">Edit note</button><button type="button" class="bad" data-dl="${i.id}">Delete</button></div>`:''}</div>`).join('')||'<div class="card" style="text-align:center;color:var(--mute)">No ideas yet. Your first one will appear here.</div>'}
   <input type="file" id="ibx" accept="image/*,video/*" multiple hidden>`;
@@ -1227,23 +1271,25 @@ async function ideaBank(m){
   paint();
   $('#one').onclick=()=>{lv=false;clientView();};$('#lst').onclick=()=>{lv=true;clientView();};$('#cvb3').onclick=()=>{lv='cal';clientView();};$('#fvb3').onclick=()=>{lv='feed';clientView();};
   $('#ibn').oninput=e=>{ideaDraft.note=e.target.value;};
+  m.querySelectorAll('.ibkb').forEach(b=>b.onclick=()=>{ideaDraft.kind=ideaDraft.kind===b.dataset.k?'':b.dataset.k;m.querySelectorAll('.ibkb').forEach(x=>{const on=x.dataset.k===ideaDraft.kind;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on);});});
+  $('#ibd').onchange=e=>{ideaDraft.by=e.target.value;};
   $('#ibf').onclick=()=>$('#ibi').click();
   $('#ibi').onchange=e=>{ideaDraft.files=ideaDraft.files.concat([...e.target.files]);e.target.value='';paint();};
   $('#ibs').onclick=async()=>{
     const note=$('#ibn').value.trim(),files=ideaDraft.files.slice();
     if(!note&&!files.length)return msg('Add a note or a photo first.');
     $('#ibs').disabled=true;$('#ibf').disabled=true;msg('Saving your idea\u2026');
-    const ins=await sb.from('ideas').insert({client_id:cid,source:'client',author_id:user.id,notes:note||null,title:(note||'Photo idea').split('\n')[0].slice(0,60)}).select('id').single();
+    const ins=await sb.from('ideas').insert({client_id:cid,source:'client',author_id:user.id,notes:(ideaTag(ideaDraft.kind,ideaDraft.by)+(ideaTag(ideaDraft.kind,ideaDraft.by)&&note?'\n':'')+note)||null,title:(note||'Photo idea').split('\n')[0].slice(0,60)}).select('id').single();
     if(ins.error||!ins.data){$('#ibs').disabled=false;$('#ibf').disabled=false;return msg('Could not save: '+(ins.error?ins.error.message:'please try again'));}
     if(files.length)await sendMedia(files,ins.data.id,msg);
-    ideaDraft={note:'',files:[]};toast('Idea sent to your social media manager.');
+    ideaDraft={note:'',files:[],kind:'',by:''};toast('Idea sent to your social media manager.');
     if(lv==='ideas'&&$('#cm'))ideaBank($('#cm'));};
   m.querySelectorAll('[data-ad]').forEach(b=>b.onclick=()=>{const x=$('#ibx');x.onchange=async e=>{const fs=[...e.target.files];e.target.value='';if(!fs.length)return;await sendMedia(fs,b.dataset.ad,msg);if(lv==='ideas'&&$('#cm'))ideaBank($('#cm'));};x.click();});
   m.querySelectorAll('[data-dl]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this idea?'))return;const w=await sb.from('ideas').delete().eq('id',b.dataset.dl);if(w.error)return alert('Could not delete: '+w.error.message);ideaBank(m);});
   m.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{const i=list.find(x=>x.id===b.dataset.ed),d=$('#dlg');
-    d.innerHTML=`<form id="ief"><h2 style="margin-top:0">Edit your note</h2><textarea id="ien" rows="4">${esc(i.notes||'')}</textarea><p class="err" id="iee"></p><div class="row"><button class="p">Save</button><button type="button" id="iex">Cancel</button></div></form>`;
+    d.innerHTML=`<form id="ief"><h2 style="margin-top:0">Edit your note</h2><textarea id="ien" rows="4">${esc(ideaMeta(i).text)}</textarea><label for="iek">Type</label><select id="iek"><option value="">(not set)</option>${IDEA_KINDS.map(k=>`<option${k===ideaMeta(i).kind?' selected':''}>${k}</option>`).join('')}</select><label for="ied">Needed by</label><input type="date" id="ied" value="${ideaMeta(i).by}"><p class="err" id="iee"></p><div class="row"><button class="p">Save</button><button type="button" id="iex">Cancel</button></div></form>`;
     d.showModal();$('#iex').onclick=()=>d.close();
-    $('#ief').onsubmit=async ev=>{ev.preventDefault();const t=$('#ien').value.trim();const w=await sb.from('ideas').update({notes:t||null,title:(t||'Photo idea').split('\n')[0].slice(0,60)}).eq('id',i.id);if(w.error)return $('#iee').textContent='Could not save: '+w.error.message;d.close();ideaBank(m);};});
+    $('#ief').onsubmit=async ev=>{ev.preventDefault();const t=$('#ien').value.trim(),tg=ideaTag($('#iek').value,$('#ied').value);const w=await sb.from('ideas').update({notes:(tg+(tg&&t?'\n':'')+t)||null,title:(t||'Photo idea').split('\n')[0].slice(0,60)}).eq('id',i.id);if(w.error)return $('#iee').textContent='Could not save: '+w.error.message;d.close();ideaBank(m);};});
 }
 function onLiveIdea(pl){const n=pl.new||{};if(!n.id||!me)return;
   if(me.role==='admin'){if(pl.eventType==='INSERT'&&n.source==='client'){toast(liveName(n.client_id)+' added an idea'+(n.title?': '+n.title:''));refreshIdeaCount();}return;}
@@ -1342,6 +1388,24 @@ async function showHistory(pid){const b=$('#hsb');if(!b)return;b.textContent='Lo
     return `<div class="cm">${esc(t)}<br><small>${new Date(h.changed_at).toLocaleString()} \u00b7 ${who(h)}</small></div>`;}).join('')||'<div class="cm"><small>No history yet.</small></div>';}
 
 /* ---------- Client ---------- */
+function weekView(m){
+  const td=iso(new Date()),end=addDays(td,6),fmt=ds=>new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
+  const byDT=(a,b)=>((a.post_date||'9999')+(a.post_time||'')).localeCompare((b.post_date||'9999')+(b.post_time||''));
+  const live=posts.filter(p=>p.post_date&&p.post_date>=td&&p.post_date<=end&&p.status!=='Posted').sort(byDT);
+  const pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').sort((a,b)=>(a.due_date||a.post_date||'9999').localeCompare(b.due_date||b.post_date||'9999')||byDT(a,b));
+  const row=p=>`<button type="button" class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1;min-width:0"><div><b>${esc(p.platform)}</b> ${apBadge(p,1)}${window.ccTag?window.ccTag(p):''}</div><div class="meta">${p.post_date?esc(fmt(p.post_date)):'No date'}${p.post_time?' \u00b7 '+esc(t12(p.post_time)):''}</div>${dueChip(p)?`<div style="margin:4px 0">${dueChip(p)}</div>`:''}<div class="meta clamp2">${esc(p.caption||'No caption yet.')}</div></div></button>`;
+  const days=[...Array(7)].map((_,i)=>addDays(td,i));
+  const liveHtml=days.map(ds=>{const ps=live.filter(p=>p.post_date===ds);return ps.length?`<div class="wd${ds===td?' today':''}"><h3>${ds===td?'Today \u00b7 ':''}${esc(fmt(ds))}</h3>${ps.map(row).join('')}</div>`:'';}).join('');
+  m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="cvb3">Calendar</button><button id="fvb3">Feed</button></div>
+  <div class="card"><h2 style="margin:0 0 2px">This week</h2><div style="color:var(--mute)">${esc(fmt(td))} to ${esc(fmt(end))}</div>
+  <div class="stats"><div class="stat"><b>${live.length}</b>going live in the next 7 days</div><div class="stat"><b>${pend.length}</b>waiting for your approval</div></div>
+  ${pend.length?'<button type="button" class="p big" id="wkgo" style="width:100%">Review the next waiting post</button>':''}</div>
+  <h3 style="margin:16px 0 6px">Needs your approval</h3>${pend.length?`<div class="wd">${pend.slice(0,10).map(row).join('')}</div>${pend.length>10?`<p style="color:var(--mute)">${pend.length-10} more are in the List view.</p>`:''}`:'<div class="card" style="text-align:center">\ud83c\udf89 Nothing is waiting for your approval.</div>'}
+  <h3 style="margin:16px 0 6px">Going live in the next 7 days</h3>${liveHtml||'<div class="card" style="text-align:center;color:var(--mute)">Nothing goes live in the next 7 days.</div>'}`;
+  $('#one').onclick=()=>{lv=false;clientView();};$('#lst').onclick=()=>{lv=true;clientView();};$('#cvb3').onclick=()=>{lv='cal';clientView();};$('#fvb3').onclick=()=>{lv='feed';clientView();};
+  if($('#wkgo'))$('#wkgo').onclick=()=>{lv=false;idx=posts.indexOf(pend[0]);clientView();scrollTo(0,0);};
+  m.querySelectorAll('.wp[data-i]').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();scrollTo(0,0);});
+}
 function listView(m){
   const kk=p=>p.approval==='Changes requested'?'Changes':p.approval;
   const lab={Pending:'Waiting for your approval',Approved:'Approved',Changes:'You asked for changes'};
@@ -1373,10 +1437,10 @@ function clientView(){
   $('#app').innerHTML=head(`<span style="color:var(--mute)">${posts.filter(p=>p.approval==='Pending').length} waiting for your approval</span><button id="ideab">\ud83d\udca1 Ideas</button>`)+`<main><div id="topb"></div><div id="cm"></div></main>`;
   bindOut();
   if($('#ideab'))$('#ideab').onclick=()=>{lv='ideas';clientView();};
-  $('#topb').innerHTML=lv==='ideas'?'':needsBanner()+progress(posts)+(lv?akey():'');if($('#gonx'))$('#gonx').onclick=e=>{lv=false;idx=+e.currentTarget.dataset.i;clientView();};
+  $('#topb').innerHTML=(lv==='ideas'||lv==='week')?'':needsBanner()+progress(posts)+(lv?akey():'');if($('#gonx'))$('#gonx').onclick=e=>{lv=false;idx=+e.currentTarget.dataset.i;clientView();};
   const m=$('#cm');
   if(!posts.length&&lv!=='ideas'){m.innerHTML='<div class="card" style="text-align:center;padding:32px"><div style="font-size:44px">🗓️</div><h2 style="margin:8px 0">Nothing here yet</h2><p style="color:var(--mute);margin:0">Your social media manager is preparing your first posts. They will show up here as soon as they are ready.</p></div>';return;}
-  if(lv) return lv==='ideas'?ideaBank(m):lv==='cal'?calView(m):lv==='feed'?clientFeed(m):listView(m);
+  if(lv) return lv==='week'?weekView(m):lv==='ideas'?ideaBank(m):lv==='cal'?calView(m):lv==='feed'?clientFeed(m):listView(m);
   idx=Math.min(idx,posts.length-1);
   const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
@@ -2311,10 +2375,10 @@ function tabs(){
   if(!isCli()){document.body.classList.remove('hastabs');if(t)t.remove();return;}
   document.body.classList.add('hastabs');
   if(!t){t=document.createElement('nav');t.id='tabs';t.setAttribute('aria-label','Views');
-    t.innerHTML=[['p','▭','Post'],['l','☰','List'],['c','▦','Calendar'],['f','▣','Feed'],['i','💡','Ideas']].map(([k,i,l])=>`<button type="button" data-k="${k}"><i aria-hidden="true">${i}</i><span>${l}</span></button>`).join('');
+    t.innerHTML=[['w','📅','Week'],['p','▭','Post'],['l','☰','List'],['c','▦','Calendar'],['f','▣','Feed'],['i','💡','Ideas']].map(([k,i,l])=>`<button type="button" data-k="${k}"><i aria-hidden="true">${i}</i><span>${l}</span></button>`).join('');
     document.body.appendChild(t);
-    t.onclick=e=>{const b=e.target.closest('button');if(!b)return;lv={p:false,l:true,c:'cal',f:'feed',i:'ideas'}[b.dataset.k];clientView();scrollTo(0,0);};}
-  const k=lv===true?'l':lv==='cal'?'c':lv==='feed'?'f':lv==='ideas'?'i':'p';
+    t.onclick=e=>{const b=e.target.closest('button');if(!b)return;lv={w:'week',p:false,l:true,c:'cal',f:'feed',i:'ideas'}[b.dataset.k];clientView();scrollTo(0,0);};}
+  const k=lv===true?'l':lv==='cal'?'c':lv==='feed'?'f':lv==='ideas'?'i':lv==='week'?'w':'p';
   t.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
 }
 
@@ -2543,14 +2607,14 @@ const phone=()=>matchMedia('(max-width:640px)').matches;
 /* ---------- in-app back button (client) ----------
    stack = where the client is: calendar, then list/feed, then a post.
    Back steps down that stack; popups close first; Back on the calendar leaves the site. */
-const key=()=>lv===false?'post':lv===true?'list':lv==='feed'?'feed':lv==='ideas'?'ideas':'cal';
+const key=()=>lv===false?'post':lv===true?'list':lv==='feed'?'feed':lv==='ideas'?'ideas':lv==='week'?'week':'cal';
 let stack=['cal'],inited=false,pop=false,waiting=null,wt=0,pendSync=false,pendLay=false;
 const st=(s,n)=>({cc:n||1,stack:s.slice(),idx:idx});
 function expect(fn){waiting=fn;clearTimeout(wt);wt=setTimeout(()=>{if(waiting){const f=waiting;waiting=null;f();settle();}},800);}
 function settle(){if(pendLay){pendLay=false;layers();}if(pendSync){pendSync=false;sync();}}
 function target(k){
   if(k==='cal')return ['cal'];
-  if(k==='list'||k==='feed'||k==='ideas')return ['cal',k];
+  if(k==='list'||k==='feed'||k==='ideas'||k==='week')return ['cal',k];
   const base=stack[stack.length-1]==='post'?stack.slice(0,-1):stack;
   return base.concat('post');}
 function pushMany(arr){arr.forEach(v=>{stack.push(v);history.pushState(st(stack),'');});}
@@ -2583,7 +2647,7 @@ addEventListener('popstate',e=>{
   const s=e.state;
   if(s&&s.cc&&Array.isArray(s.stack)){
     stack=s.stack.slice();const k=stack[stack.length-1];
-    lv=k==='post'?false:k==='list'?true:k==='feed'?'feed':k==='ideas'?'ideas':'cal';
+    lv=k==='post'?false:k==='list'?true:k==='feed'?'feed':k==='ideas'?'ideas':k==='week'?'week':'cal';
     if(k==='post'&&s.idx!=null)idx=Math.max(0,Math.min(s.idx,posts.length-1));
     clientView();}});
 const _sm=HTMLDialogElement.prototype.showModal;
@@ -2681,6 +2745,97 @@ async function repl(pid,sel){
 
 let raf=0;
 function enh(){try{a2Run();}catch(e){console.error('ui9',e);}}
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(enh);}).observe(Q('#app'),{childList:true,subtree:true});
+enh();
+})();
+</script>
+
+<!-- UI UPGRADE 10: changed-since-you-looked markers, This week / Add to calendar buttons, idea form, quick replies (styles) -->
+<style>
+.sb.upd{background:#e8780f!important;color:#fff!important;font-weight:700;margin-left:4px}
+.updd{display:inline-block;width:8px;height:8px;border-radius:50%;background:#e8780f;margin-left:4px;vertical-align:middle}
+.upn{background:var(--pe-bg);color:var(--pe-fg);border-radius:8px;padding:6px 10px;margin:8px 0 0;font-weight:600;font-size:14px}
+.updb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border:1px solid #e8780f;border-radius:10px;font-size:14px}
+.updb button{min-height:0;padding:4px 12px}
+.cgrid .day{position:relative}
+.cgrid .day.hasupd::after{content:"";position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:#e8780f}
+.qr{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
+.qrc{border-radius:18px;padding:6px 12px;font-size:14px}
+.ibk{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
+.ibk button{border-radius:18px;padding:6px 14px}
+.ibk button.on{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:500}
+.ideam{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
+.badge.ik{background:var(--line);color:var(--ink)}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body.hastabs #wkb{display:none}
+@media(max-width:900px){#tabs button{font-size:11px;padding:4px 0}#tabs button i{font-size:19px}}
+@media print{.updb,.upn{display:none!important}}
+</style>
+<script>
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s);
+const isCli=()=>typeof me!=='undefined'&&me&&me.role!=='admin';
+
+/* ---------- "changed since you last looked" (stored in this browser only) ----------
+   For each post we remember what the client last saw. Opening a post marks it as seen. */
+const hs=s=>{s=String(s||'');let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36);};
+const fp=p=>({c:hs(p.caption),v:hs(p.visual),d:p.post_date||'',t:(p.post_time||'').slice(0,5),h:hs(p.hashtags)});
+const LAB={c:'wording',v:'photo or video',d:'date or time',t:'date or time',h:'hashtags'};
+let CH=new Map(),store=null,skey='',viewing=null;
+const load=()=>{try{return JSON.parse(localStorage.getItem(skey)||'null');}catch(e){return null;}};
+const save=()=>{try{localStorage.setItem(skey,JSON.stringify(store));}catch(e){}};
+function compute(){
+  if(!isCli()||!user||!cid)return;
+  skey='cc_seen:'+user.id+':'+cid;
+  let m=load();
+  if(!m){m={};posts.forEach(p=>{m[p.id]=fp(p);});store=m;save();CH=new Map();return;}   // first visit: nothing counts as changed
+  store=m;CH=new Map();
+  posts.forEach(p=>{const o=m[p.id];if(!o){CH.set(p.id,['new']);return;}
+    const n=fp(p),l=[...new Set(Object.keys(LAB).filter(k=>o[k]!==n[k]).map(k=>LAB[k]))];
+    if(l.length)CH.set(p.id,l);});}
+function commit(id){const p=posts.find(x=>x.id===id);if(p&&store){store[id]=fp(p);save();}CH.delete(id);}
+const _lp=window.loadPosts;
+window.loadPosts=async function(){const r=await _lp.apply(this,arguments);try{compute();}catch(e){console.error('chg',e);}return r;};
+const tag=p=>{const l=CH.get(p.id);return l?`<span class="sb upd">${l[0]==='new'?'New':'Updated'}</span>`:'';};
+window.ccTag=tag;
+addEventListener('pagehide',()=>{if(viewing){commit(viewing);viewing=null;}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&viewing){commit(viewing);viewing=null;}});
+
+function chgRun(){
+  if(!isCli())return;
+  if(viewing&&(lv!==false||!posts[idx]||posts[idx].id!==viewing)){commit(viewing);viewing=null;}
+  /* post screen: say what changed */
+  const c=Q('#cm>.card');
+  if(lv===false&&posts[idx]){const p=posts[idx],l=CH.get(p.id);
+    if(l){viewing=p.id;
+      if(c&&!c.querySelector('.upn')){const r=c.querySelector(':scope>.row');
+        if(r)r.insertAdjacentHTML('afterend',`<div class="upn" role="status">${l[0]==='new'?'\u{1F195} This post is new since you last looked.':'\u270E Updated since you last looked: '+l.join(', ')+'.'}</div>`);}}}
+  /* list view */
+  document.querySelectorAll('#cm button.card[data-i]:not([data-chg])').forEach(b=>{b.dataset.chg='1';const p=posts[+b.dataset.i],t=p&&tag(p),f=b.querySelector('.row b');if(t&&f)f.insertAdjacentHTML('afterend',t);});
+  /* calendar */
+  document.querySelectorAll('.cgrid .day[data-ds]:not([data-chg])').forEach(d=>{d.dataset.chg='1';
+    const ps=posts.filter(p=>p.post_date===d.dataset.ds&&CH.has(p.id));if(!ps.length)return;
+    d.classList.add('hasupd');
+    d.querySelectorAll('.cc[data-i]').forEach(ch=>{const p=posts[+ch.dataset.i];if(p&&CH.has(p.id)){const a=ch.querySelector('.cl1');if(a)a.insertAdjacentHTML('beforeend','<i class="updd" title="Changed since you last looked"></i>');}});});
+  const lg=Q('#dl5');if(lg&&CH.size&&!lg.querySelector('.updd'))lg.insertAdjacentHTML('beforeend','<span><i class="updd" style="margin:0 4px 0 0"></i>changed since you looked</span>');
+  /* summary strip */
+  const tb=Q('#topb');
+  if(tb&&lv!=='ideas'&&lv!=='week'&&lv!==false&&CH.size&&!tb.querySelector('.updb')){
+    const ids=[...CH.keys()].map(id=>posts.find(x=>x.id===id)).filter(Boolean).sort((a,b)=>(a.post_date||'9999').localeCompare(b.post_date||'9999'));
+    if(ids.length){tb.insertAdjacentHTML('beforeend',`<div class="updb" role="status"><span>\u270E ${ids.length} post${ids.length===1?' was':'s were'} new or changed since you last looked.</span><button type="button" id="updgo">Show me</button></div>`);
+      Q('#updgo').onclick=()=>{lv=false;idx=posts.indexOf(ids[0]);clientView();scrollTo(0,0);};}}}
+
+/* ---------- This week + Add to my calendar buttons (desktop; phones use the bottom tabs) ---------- */
+function btnRun(){
+  if(!isCli())return;
+  const r=Q('#cm>.row:first-child');
+  if(!r||(!Q('#one')&&!Q('#lv')))return;
+  if(lv!=='week'&&!Q('#wkb')){const b=document.createElement('button');b.type='button';b.id='wkb';b.textContent='This week';b.onclick=()=>{lv='week';clientView();scrollTo(0,0);};r.appendChild(b);}
+  if((lv==='cal'||lv==='week')&&!Q('#icsb')){const b=document.createElement('button');b.type='button';b.id='icsb';b.textContent='\u{1F4C5} Add to my calendar';b.onclick=icsDialog;r.appendChild(b);}}
+
+let raf=0;
+function enh(){try{chgRun();btnRun();}catch(e){console.error('ui10',e);}}
 new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(enh);}).observe(Q('#app'),{childList:true,subtree:true});
 enh();
 })();
