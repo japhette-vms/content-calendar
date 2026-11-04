@@ -2841,5 +2841,104 @@ enh();
 })();
 </script>
 
+<script>
+/* Add-ons: Needs attention, Remind client, direct post links, Suggest wording, Approve with a small fix, badge count. No database changes. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),dl=()=>Q('#dlg');
+const fail=e=>console.error('addons',e);
+const isA=()=>me&&me.role==='admin';
+const link=id=>location.origin+location.pathname+'#post='+encodeURIComponent(id);
+const day=d=>d?Math.round((new Date(d+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5):null;
+const fmt=d=>new Date(d+'T00:00').toLocaleDateString('en',{weekday:'long',month:'short',day:'numeric'});
+const open=(h)=>{const d=dl();d.innerHTML=h+'<div class="row" style="margin-top:14px"><button type="button" id="axc">Close</button></div>';if(!d.open)d.showModal();Q('#axc').onclick=()=>d.close();return d;};
+
+/* 1. Needs attention (all clients) */
+async function attention(){
+  open('<p>Loading…</p>');
+  try{
+    const [P,C,I]=await Promise.all([fetchAll('posts','id,client_id,post_date,post_time,platform,approval,status,due_date'),
+      sb.from('comments').select('id,post_id,body,created_at').eq('resolved',false).neq('author_id',user.id),
+      sb.from('ideas').select('id,client_id,notes').eq('source','client').eq('status','Idea')]);
+    const cn=id=>((clients.find(c=>c.id===id)||{}).name||'Client'),byId=new Map(P.map(p=>[p.id,p])),open_=P.filter(p=>p.status!=='Posted');
+    const post=p=>({cl:cn(p.client_id),t:(p.platform||'')+' · '+(p.post_date?fmt(p.post_date):'No date'),go:()=>goPost(p)});
+    const S=[
+      ['Changes requested',open_.filter(p=>p.approval==='Changes requested').map(post)],
+      ['Unresolved comments',C.data?C.data.filter(c=>byId.has(c.post_id)).map(c=>{const p=byId.get(c.post_id);return {...post(p),t:'“'+String(c.body).slice(0,70)+'” · '+(p.post_date?fmt(p.post_date):'')};}):[]],
+      ['New ideas',(I.data||[]).map(i=>({cl:cn(i.client_id),t:String(i.notes||'').replace(/^\[[^\]]*\]\n?/,'').slice(0,80)||'New idea',go:()=>goIdeas(i.client_id)}))],
+      ['Approvals overdue',open_.filter(p=>p.approval==='Pending'&&p.due_date&&day(p.due_date)<0).map(post)],
+      ['Going live in 3 days, not approved',open_.filter(p=>p.approval!=='Approved'&&p.post_date&&day(p.post_date)>=0&&day(p.post_date)<=3).map(post)]];
+    const tot=S.reduce((n,s)=>n+s[1].length,0),fns=[];
+    open(`<h2 style="margin-top:0">Needs your attention</h2>${tot?'':'<p>Nothing is waiting. You are all caught up.</p>'}`+S.filter(s=>s[1].length).map(s=>`<h3 style="margin:14px 0 4px">${s[0]} (${s[1].length})</h3>`+s[1].map(it=>{fns.push(it.go);return `<button type="button" class="axg" data-i="${fns.length-1}" style="display:block;width:100%;text-align:left;margin:4px 0"><b>${esc(it.cl)}</b><br><small>${esc(it.t)}</small></button>`;}).join('')).join(''));
+    document.querySelectorAll('.axg').forEach(b=>b.onclick=()=>{dl().close();fns[+b.dataset.i]();});
+  }catch(e){fail(e);open('<p>Could not load: '+esc(e.message||e)+'</p>');}
+}
+async function switchTo(id){if(cid!==id){cid=id;const s=Q('#cs');if(s)s.value=id;await loadPosts();adminView();}}
+async function goPost(p){await switchTo(p.client_id);const f=posts.find(x=>x.id===p.id);if(f)postForm(f);}
+async function goIdeas(id){await switchTo(id);try{ideasForm();}catch(e){fail(e);}}
+
+/* 2. Remind client */
+function remind(){
+  const pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted');
+  if(!pend.length)return toast('Nothing is waiting for this client.');
+  const first=pend.find(p=>p.post_date)||pend[0],n=pend.length,nm=((clients.find(c=>c.id===cid)||{}).name||'').trim();
+  const msg=`Hi${nm?' '+nm:''}! ${n} post${n===1?' needs':'s need'} your approval${first.post_date?', the first by '+new Date(first.post_date+'T00:00').toLocaleDateString('en',{weekday:'long'}):''}. It takes a minute: ${link(first.id)}`;
+  const e=encodeURIComponent(msg);
+  open(`<h2 style="margin-top:0">Remind client</h2><textarea id="axm" rows="5">${esc(msg)}</textarea><div class="row" style="margin-top:10px">${navigator.share?'<button class="p" type="button" id="axs">Share…</button>':''}<a href="https://wa.me/?text=${e}" target="_blank" rel="noopener"><button type="button">WhatsApp</button></a><a href="mailto:?subject=${encodeURIComponent('Posts waiting for your approval')}&body=${e}"><button type="button">Email</button></a><button type="button" id="axy">Copy</button></div><p style="font-size:13px;color:var(--mute)">Messenger: use Share… and pick it.</p>`);
+  const cur=()=>Q('#axm').value;
+  if(Q('#axs'))Q('#axs').onclick=()=>navigator.share({text:cur()}).catch(()=>{});
+  Q('#axy').onclick=()=>navigator.clipboard.writeText(cur()).then(()=>toast('Copied'),()=>toast('Could not copy'));
+  Q('#axm').oninput=()=>{const v=encodeURIComponent(cur());document.querySelectorAll('#dlg a').forEach(a=>{a.href=a.href.replace(/(text=|body=)[^&]*/,'$1'+v);});};
+}
+
+/* 7 + 4. Approve with a small fix / Suggest wording (client) */
+async function finish(p,approve,body,back){
+  if(approve){const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:'Approved'});if(r.error)return alert('Could not save: '+r.error.message);}
+  const w=await sb.from('comments').insert({post_id:p.id,author_id:user.id,body});if(w.error)alert('Could not save the note: '+w.error.message);
+  await loadPosts();const n=posts.length;if(approve)for(let o=1;o<=n;o++){const j=(back+o)%n;if(posts[j].approval==='Pending'){idx=j;break;}}
+  clientView();toast(approve?'Approved with your note':'Suggestion sent');
+}
+function smallFix(){const p=posts[idx],back=idx;
+  const d=open(`<h2 style="margin-top:0">Approve with a small fix</h2><p style="color:var(--mute)">The post is approved. Tell us the tweak and we will make it.</p><textarea id="axt" rows="3" placeholder="For example: please fix the typo in line 2"></textarea><div class="row" style="margin-top:10px"><button class="ok" type="button" id="axg">Approve and send note</button></div>`);
+  Q('#axg').onclick=()=>{const t=Q('#axt').value.trim();if(!t)return Q('#axt').focus();d.close();finish(p,true,'Approved with a small fix: '+t,back);};}
+function suggest(){const p=posts[idx],back=idx;
+  const d=open(`<h2 style="margin-top:0">Suggest wording</h2><label>Current</label><div class="card" style="white-space:pre-wrap">${esc(p.caption||'')}</div><label for="axw">Your version</label><textarea id="axw" rows="6">${esc(p.caption||'')}</textarea><div class="row" style="margin-top:10px"><button class="p" type="button" id="axg">Send suggestion</button></div>`);
+  Q('#axg').onclick=()=>{const t=Q('#axw').value.trim();if(!t||t===(p.caption||'').trim())return toast('Change the wording first.');d.close();finish(p,false,'Suggested wording: '+t,back);};}
+
+/* 4 (admin side). Use this wording */
+function useBtns(){
+  const ctx=window.__cmCtx;if(!isA()||!ctx)return;
+  document.querySelectorAll('.cm[data-cid]').forEach(el=>{const b=el.querySelector('.cbody');
+    if(!b||el.dataset.ax||!/^Suggested wording:/.test(b.textContent))return;el.dataset.ax='1';
+    const btn=document.createElement('button');btn.type='button';btn.textContent='Use this wording';btn.className='p';btn.style.cssText='min-height:0;padding:2px 10px;font-size:12px;margin-left:8px';
+    btn.onclick=async()=>{const cap=b.textContent.replace(/^Suggested wording:\s*/,'');
+      const r=await sb.from('posts').update({caption:cap}).eq('id',ctx.pid);if(r.error)return alert('Could not update: '+r.error.message);
+      await sb.from('comments').update({resolved:true}).eq('id',el.dataset.cid);
+      await loadPosts();toast('Caption updated. Reopen the post to see it.');showComments(ctx.pid,ctx.sel,true);};
+    el.appendChild(btn);});
+}
+
+/* 3. Direct links + 11. badge + wiring */
+let linked=false;
+function run(){
+  if(!me)return;
+  if(isA()){const h=Q('header');
+    if(h&&!Q('#axa')){const t=Q('#tl'),mk=(id,tx,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=tx;b.onclick=fn;h.insertBefore(b,t||Q('#out'));};
+      mk('axa','Needs attention',attention);mk('axr','Remind client',remind);}
+    useBtns();return;}
+  if(!linked&&posts.length){linked=true;const m=location.hash.match(/post=([^&]+)/);
+    if(m){const i=posts.findIndex(p=>String(p.id)===decodeURIComponent(m[1]));if(i>=0){lv=false;idx=i;clientView();return;}}}
+  const ap=Q('#ap');
+  if(ap&&!Q('#axf')){const f=document.createElement('button'),s=document.createElement('button');
+    f.id='axf';f.type='button';f.className='big';f.textContent='Approve with a small fix';f.onclick=smallFix;
+    s.id='axw2';s.type='button';s.className='big';s.textContent='Suggest wording';s.onclick=suggest;
+    ap.parentNode.appendChild(f);ap.parentNode.appendChild(s);}
+  try{if(navigator.setAppBadge){const n=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').length;n?navigator.setAppBadge(n):navigator.clearAppBadge();}}catch(e){}
+}
+let raf=0;
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+})();
+</script>
+
 </body>
 </html>
