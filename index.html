@@ -3371,6 +3371,13 @@ function report(){const d=Q('#dlg');
     w.document.write(`<!doctype html><meta charset="utf-8"><title>Report</title><body style="font:14px system-ui;margin:28px;color:#1d2030"><h1 style="margin:0">${esc(nm)}${a?' \u00b7 '+esc(a.platform)+' \u00b7 '+esc(a.name):''}</h1><p style="color:#6b6f85">${esc(m)} \u00b7 ${rows.length} posts \u00b7 ${rows.filter(p=>p.status==='Posted').length} posted</p><p><b>Reach</b> ${n(sum('reach'))} \u00b7 <b>Likes</b> ${n(sum('likes'))} \u00b7 <b>Comments</b> ${n(sum('comments_count'))} \u00b7 <b>Shares</b> ${n(sum('shares_saves'))} \u00b7 <b>Engagements</b> ${n(sum('engagements'))}</p><table style="border-collapse:collapse;width:100%;font-size:13px"><tr style="text-align:left;border-bottom:2px solid #ccc"><th>Date</th><th>Account</th><th>Format</th><th>Status</th><th>Caption</th><th>Reach</th><th>Eng.</th></tr>${rows.map(p=>`<tr style="border-top:1px solid #ddd"><td>${esc(p.post_date)}</td><td>${esc(p.platform)}${p.account?' \u00b7 '+esc(p.account):''}</td><td>${esc(p.format||'')}</td><td>${esc(p.status)}</td><td>${esc((p.caption||'').slice(0,90))}</td><td>${n(p.reach)}</td><td>${n(p.engagements)}</td></tr>`).join('')}</table></body>`);
     w.document.close();w.focus();setTimeout(()=>w.print(),400);};}
 function formX(p){const f=Q('#pf');if(!f)return;
+  window.__addFiles=null;window.__pfl=null;
+  if(p&&!p.id&&Q('#upx')){const fl=[];Q('#upx').innerHTML='<div class="upl"><h3 style="margin:0 0 6px">Photos &amp; videos</h3><div id="pfl" style="color:var(--mute);font-size:13px;margin-bottom:8px">No files chosen yet. Drag photos here, or use the button. They upload automatically when you click Save post.</div><button type="button" class="p ubig" id="pfb">\ud83d\udcf7 Add photo or video</button><input type="file" id="pff" accept="image/*,video/*" multiple hidden></div>';
+    Q('#pfb').onclick=()=>Q('#pff').click();
+    Q('#pff').onchange=e=>{fl.push(...e.target.files);e.target.value='';Q('#pfl').textContent=fl.length?fl.map(x=>x.name).join(', '):'No files chosen yet.';};
+    window.__pfl=fl;window.__addFiles=a=>{fl.push(...a);Q('#pfl').textContent=fl.map(x=>x.name).join(', ');};if(window.__rf){window.__addFiles(window.__rf);window.__rf=null;}
+    const o=f.onsubmit;f.onsubmit=e=>{window.__pf2=fl.slice();return o.call(f,e);};}
+  if(p&&p.id&&window.__pf2&&window.__pf2.length){const fl=window.__pf2;window.__pf2=null;let n=0;const iv=setInterval(()=>{const inp=Q('#umf');if(inp){clearInterval(iv);const dt=new DataTransfer();fl.forEach(x=>dt.items.add(x));inp.files=dt.files;inp.dispatchEvent(new Event('change'));}else if(++n>40)clearInterval(iv);},300);}
   const hs=Q('#hs'),ac=f.elements.namedItem('account');
   if(hs&&ac){const all=hsets.slice(),fill=()=>{const a=(ac.value||'').toLowerCase();hs.innerHTML='<option value="">Add a saved hashtag set...</option>'+all.filter(h=>{const n=h.name.toLowerCase();return !ACCOUNTS.some(x=>n.includes(x.name.toLowerCase()))||(a&&n.includes(a));}).map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('');};ac.addEventListener('change',fill);fill();}
   if(p&&p.id&&ACCOUNTS.length>1&&Q('#pe')){
@@ -3443,6 +3450,30 @@ function tidy(){
 }
 let t=null;new MutationObserver(()=>{if(t)return;t=requestAnimationFrame(()=>{t=null;tidy();});}).observe(document.getElementById('app'),{childList:true,subtree:true});
 tidy();
+})();
+</script>
+<style>dialog.dz{outline:3px dashed var(--acc);outline-offset:-8px}</style>
+<script>
+(function(){
+const d=document.getElementById('dlg'),Q=s=>document.querySelector(s);
+let down=false,cur=null,draft=null;
+const out=e=>{const r=d.getBoundingClientRect();return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;};
+const _pf=window.postForm;window.postForm=function(p){cur=p||{};return _pf.apply(this,arguments);};
+function pill(){let b=Q('#drf');if(!b){b=document.createElement('button');b.id='drf';b.type='button';b.className='p';b.style.cssText='position:fixed;right:20px;bottom:20px;z-index:60;border-radius:24px;box-shadow:0 8px 24px #0006';
+  b.onclick=()=>{const x=draft;draft=null;b.remove();window.__rf=x.files;postForm(x.p);};document.body.appendChild(b);}
+  b.textContent='\u270e Resume unsaved post';}
+function stash(){const f=Q('#pf');if(!f||!d.open)return;const fd=Object.fromEntries(new FormData(f));fd.repost=fd.repost==='on';
+  const files=(window.__pfl||[]).slice(),o=cur||{};
+  if(files.length||['caption','hashtags','visual','campaign','notes'].some(k=>(fd[k]||'')!==(o[k]||''))){draft={p:{...o,...fd,_saved:undefined},files};pill();}
+  d.close();}
+d.addEventListener('mousedown',e=>{down=out(e);});
+d.addEventListener('click',e=>{if(down&&Q('#pf')&&out(e))stash();down=false;});
+d.addEventListener('cancel',()=>{if(Q('#pf'))stash();});
+['dragenter','dragover'].forEach(t=>d.addEventListener(t,e=>{if(!e.dataTransfer||![...e.dataTransfer.types].includes('Files'))return;e.preventDefault();d.classList.add('dz');}));
+d.addEventListener('dragleave',e=>{if(e.target===d)d.classList.remove('dz');});
+d.addEventListener('drop',e=>{if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();d.classList.remove('dz');const fs=[...e.dataTransfer.files];
+  if(window.__addFiles&&Q('#pff'))return window.__addFiles(fs);
+  const inp=Q('#umf');if(!inp)return;const dt=new DataTransfer();fs.forEach(x=>dt.items.add(x));inp.files=dt.files;inp.dispatchEvent(new Event('change'));});
 })();
 </script>
 </body>
