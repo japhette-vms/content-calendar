@@ -287,7 +287,7 @@ const sbadge=p=>`<span class="sb s-${esc((p.status||'Draft').replace(/\s+/g,'-')
 const apBadge=(p,cl)=>{const k=p.approval==='Changes requested'?'Changes':p.approval;return `<span class="sb b-${esc(k)}">${k==='Pending'?'To approve':k==='Changes'&&cl?'Changes asked':k}</span>`;};
 const PIC={'Instagram':'IG','Facebook':'f','LinkedIn':'in','TikTok':'♪','Google Business Profile':'G'};
 const picon=pl=>`<span class="pi" style="background:${PCOL[pl]||'#888'}" aria-hidden="true">${PIC[pl]||'•'}</span>`;
-let fPil=null,fPlat=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat);
+let fPil=null,fPlat=null,fCam=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat)||(fCam&&(p.campaign||'').trim()!==fCam);
 const progress=(ps,who)=>{const n=ps.length,a=ps.filter(p=>p.approval==='Approved').length;if(!n)return '';return `<div class="progw${a===n?' done':''}"><div style="margin-bottom:4px">${a===n?'All '+n+' posts approved 🎉':a+' of '+n+' posts approved'+(who?' by '+who:'')}</div><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${a}"><div style="width:${a/n*100}%"></div></div></div>`;};
 const rel=ds=>{if(!ds)return '';const n=Math.round((new Date(ds+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);return n<0?(-n===1?'was due yesterday':'was due '+(-n)+' days ago'):n===0?'today':n===1?'tomorrow':'in '+n+' days';};
 const dueChip=p=>{if(!p.due_date||p.approval!=='Pending'||p.status==='Posted')return '';const td=iso(new Date()),late=p.due_date<td,now=p.due_date===td;const d=new Date(p.due_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});return `<span class="badge" style="background:${late||now?'#fde2e2':'#fff3d6'};color:${late||now?'#8a1f1f':'#6a4a00'}">${late?'Overdue, was due ':now?'Due today \u00b7 ':'Please approve by '}${esc(d)}</span>`;};
@@ -3068,6 +3068,80 @@ function run(){
 }
 let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
 new MutationObserver(()=>{if(isA()&&Q('#bkb2')&&!Q('#bxq'))try{run();}catch(e){fail(e);}}).observe(document.body,{childList:true});
+})();
+</script>
+
+<style>.bxt{display:inline-block;margin-top:2px;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;color:#fff;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}#bxcf{width:auto;min-height:0;padding:3px 8px;font-size:12px;border-radius:14px}</style>
+<script>
+/* Add-ons 4: Needs-attention count, campaign filter + colour labels, haptics. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('addons4',e);
+const col=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;return `hsl(${h} 55% 38%)`;};
+const vib=p=>{try{navigator.vibrate&&navigator.vibrate(p);}catch(e){}};
+
+/* Needs attention count (same rules as the list), refreshed at most every 2 minutes */
+let cnt=null,cntAt=0,busy=false;
+async function count(){
+  if(busy||Date.now()-cntAt<12e4)return;busy=true;
+  try{const day=d=>Math.round((new Date(d+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);
+    const [P,C,I]=await Promise.all([fetchAll('posts','id,approval,status,post_date,due_date'),
+      sb.from('comments').select('id,post_id').eq('resolved',false).neq('author_id',user.id),
+      sb.from('ideas').select('id',{count:'exact',head:true}).eq('source','client').eq('status','Idea')]);
+    const o=P.filter(p=>p.status!=='Posted'),ids=new Set(P.map(p=>p.id));
+    cnt=o.filter(p=>p.approval==='Changes requested').length+(C.data||[]).filter(c=>ids.has(c.post_id)).length+(I.count||0)
+      +o.filter(p=>p.approval==='Pending'&&p.due_date&&day(p.due_date)<0).length
+      +o.filter(p=>p.approval!=='Approved'&&p.post_date&&day(p.post_date)>=0&&day(p.post_date)<=3).length;
+    cntAt=Date.now();paint();}catch(e){fail(e);cntAt=Date.now();}
+  busy=false;}
+function paint(){const b=Q('#axa');if(b&&cnt!=null)b.textContent=cnt?'Needs attention · '+cnt:'Needs attention ✓';}
+addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#axa'))cntAt=0;},true);
+
+function run(){
+  if(!me)return;
+  if(!isA()){return;}
+  paint();count();
+  const lg=Q('.legend[aria-label="Filter the calendar"]');
+  if(lg&&!Q('#bxcf')){const cs=[...new Set(posts.map(p=>(p.campaign||'').trim()).filter(Boolean))].sort();
+    if(cs.length){const s=document.createElement('select');s.id='bxcf';s.setAttribute('aria-label','Filter by campaign');
+      s.innerHTML='<option value="">All campaigns</option>'+cs.map(c=>`<option${c===fCam?' selected':''}>${esc(c)}</option>`).join('');
+      s.onchange=()=>{fCam=s.value||null;adminView();};lg.appendChild(s);}}
+  document.querySelectorAll('.chip[data-id]:not([data-bxt])').forEach(c=>{c.dataset.bxt='1';
+    const p=posts.find(x=>String(x.id)===c.dataset.id),k=p&&(p.campaign||'').trim();
+    if(k){const t=document.createElement('span');t.className='bxt';t.style.background=col(k);t.textContent=k;c.appendChild(t);}});
+}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();if(!isA()&&Q('#bxd')&&!Q('#bxd').dataset.v){Q('#bxd').dataset.v='1';vib([30,50,30]);}}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#ap,#axf'))vib(25);},true);
+})();
+</script>
+<script>
+/* Add-ons 5: clients tap a day on the calendar to request a post for it (saved as an idea with a "needed by" date). */
+(function(){
+'use strict';
+const orig=window.dayTap;
+function ask(ds){
+  const d=document.getElementById('dlg'),nice=new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'});
+  d.innerHTML=`<h2 style="margin-top:0">Request a post</h2><p style="color:var(--mute);margin:0 0 6px">For ${esc(nice)}</p><label for="rqk">What is it?</label><select id="rqk">${['Event','Promotion','Photo','Question','Other'].map(k=>`<option>${k}</option>`).join('')}</select><label for="rqn">Tell us the idea</label><textarea id="rqn" rows="4" placeholder="For example: sale this day, please post a reminder"></textarea><p class="err" id="rqe"></p><div class="row" style="margin-top:12px"><button class="p" type="button" id="rqs">Send to my social media manager</button><button type="button" id="rqx">Cancel</button></div>`;
+  if(!d.open)d.showModal();document.getElementById('rqx').onclick=()=>d.close();
+  document.getElementById('rqs').onclick=async()=>{const note=document.getElementById('rqn').value.trim(),k=document.getElementById('rqk').value;
+    if(!note)return document.getElementById('rqe').textContent='Please describe the idea first.';
+    const tag=ideaTag(k==='Other'?'':k,ds);
+    const r=await sb.from('ideas').insert({client_id:cid,source:'client',author_id:user.id,notes:tag+'\n'+note,title:note.split('\n')[0].slice(0,60)});
+    if(r.error)return document.getElementById('rqe').textContent='Could not send: '+r.error.message;
+    d.close();toast('Sent! You can see it under 💡 Ideas.');};
+}
+window.dayTap=function(ds){
+  if(!me||me.role==='admin')return orig(ds);
+  const has=posts.some(p=>p.post_date===ds);
+  if(!has){if(ds<iso(new Date()))return;return ask(ds);}
+  orig(ds);
+  const d=document.getElementById('dlg'),row=d.querySelector('#dtx');
+  if(d.open&&row&&ds>=iso(new Date())&&!d.querySelector('#rqa')){const b=document.createElement('button');b.type='button';b.id='rqa';b.textContent='+ Request another post';b.onclick=()=>ask(ds);row.parentNode.insertBefore(b,row);}
+};
+function btn(){const l=document.getElementById('dayl');if(!l||!me||me.role==='admin'||!selDay||selDay<iso(new Date()))return;
+  const h=l.querySelector('#rqd');if(h&&h.dataset.d===selDay)return;if(h)h.remove();
+  const b=document.createElement('button');b.id='rqd';b.type='button';b.className='p';b.dataset.d=selDay;b.style.marginTop='10px';b.textContent='+ Request a post for this day';b.onclick=()=>ask(selDay);l.appendChild(b);}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{btn();}catch(e){console.error(e);}});}).observe(document.getElementById('app'),{childList:true,subtree:true});
 })();
 </script>
 
