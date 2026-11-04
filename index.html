@@ -3008,5 +3008,68 @@ let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimati
 })();
 </script>
 
+<style>
+/* Polish pass */
+header{position:sticky;top:0;z-index:20;box-shadow:0 1px 0 var(--line),0 4px 14px #0000000d}
+header button{padding:6px 12px;font-size:14px;border-radius:999px}
+#axa{border-color:var(--acc);color:var(--acc);font-weight:600}
+button{transition:transform .08s,filter .15s,background .15s}button:active{transform:scale(.97)}button:hover{filter:brightness(1.06)}
+.card,.stat{border-radius:14px;box-shadow:0 1px 2px #0000000a,0 6px 18px #00000008}
+.badge{font-weight:600;letter-spacing:.01em}
+dialog{border-radius:16px;padding:22px;box-shadow:0 20px 60px #0004;animation:bxu .18s ease}
+dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
+dialog h2{font-size:20px;margin:0 0 10px}
+@keyframes bxu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media(max-width:640px){dialog{margin:auto 0 0;width:100vw!important;max-width:100vw;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px))}}
+.bxd{text-align:center;padding:22px;border-radius:16px;margin:10px 0;background:linear-gradient(135deg,#177a4e22,var(--card));border:1px solid #177a4e55}
+.bxd b{font-size:19px;display:block}.bxd i{font-size:38px;font-style:normal;display:block;animation:bxp .7s ease}
+@keyframes bxp{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.2)}100%{transform:scale(1);opacity:1}}
+.bxi{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;margin:8px 0;border-radius:12px;background:var(--card);border:1px solid var(--line)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<script>
+/* Add-ons 3: Request approval for selected posts, caught-up card, install prompt, first-visit tips. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('addons3',e);
+let dip=null;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dip=e;});
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){}};
+
+/* Admin: request approval for the posts selected in the bulk bar */
+function reqApproval(){
+  const ids=[...selSet];if(!ids.length)return toast('Click some posts first.');
+  const d=Q('#dlg'),nx=new Date(Date.now()+3*864e5);
+  d.innerHTML=`<h2>Request approval</h2><p style="color:var(--mute)">${ids.length} post${ids.length===1?'':'s'} will be set to “waiting for approval”.</p><label for="bxdd">Client should approve by</label><input id="bxdd" type="date" value="${iso(nx)}"><div class="row" style="margin-top:14px"><button class="p" type="button" id="bxgo">Set and write the reminder</button><button type="button" id="bxno">Cancel</button></div>`;d.showModal();
+  Q('#bxno').onclick=()=>d.close();
+  Q('#bxgo').onclick=async()=>{const dd=Q('#bxdd').value;if(!dd)return Q('#bxdd').focus();
+    const r=await sb.from('posts').update({approval:'Pending',due_date:dd}).in('id',ids);if(r.error)return alert('Could not update: '+r.error.message);
+    d.close();selSet.clear();await loadPosts();adminView();toast('Approval requested for '+ids.length+' post'+(ids.length===1?'':'s'));
+    setTimeout(()=>{const b=Q('#axr');if(b)b.click();},300);};
+}
+
+function tips(){
+  const d=Q('#dlg');d.innerHTML=`<h2>Welcome 👋</h2><div class="bxi"><span><b>1. Approve</b><br><small>Tap Approve if a post is good to go. Swipe right works too.</small></span></div><div class="bxi"><span><b>2. Change something</b><br><small>Use Request changes, Suggest wording, or Approve with a small fix.</small></span></div><div class="bxi"><span><b>3. Share ideas</b><br><small>Got a photo or offer? Add it in 💡 Ideas.</small></span></div><div class="row" style="margin-top:14px"><button class="p" type="button" id="bxok">Got it</button></div>`;
+  d.showModal();Q('#bxok').onclick=()=>d.close();ls('cc_tips','1');
+}
+
+function run(){
+  if(!me)return;
+  if(isA()){const b=Q('#bkb2');if(b&&!Q('#bxq')){const x=document.createElement('button');x.id='bxq';x.type='button';x.className='p';x.textContent='Request approval';x.onclick=reqApproval;b.appendChild(x);}return;}
+  const t=Q('#topb');if(!t||lv==='ideas')return;
+  if(!ls('cc_tips')&&posts.length&&!Q('#dlg[open]')){ls('cc_tips','1');setTimeout(tips,400);}
+  const n=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').length;
+  if(posts.length&&!n&&!Q('#bxd')){const nxt=posts.find(p=>p.post_date>=iso(new Date())&&p.status!=='Posted'),c=document.createElement('div');c.id='bxd';c.className='bxd';
+    c.innerHTML=`<i>🎉</i><b>You’re all caught up</b><span style="color:var(--mute)">Nothing is waiting for your approval.${nxt?' Next post goes live '+esc(new Date(nxt.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}))+'.':''}</span>`;t.prepend(c);}
+  const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+  if(!standalone&&!ls('cc_inst')&&!Q('#bxn')&&matchMedia('(max-width:900px)').matches){const c=document.createElement('div');c.id='bxn';c.className='bxi';
+    c.innerHTML='<span><b>Add to your home screen</b><br><small>One tap to open, and a badge shows how many posts are waiting.</small></span><span class="row"><button class="p" type="button" id="bxai">How</button><button type="button" id="bxax" aria-label="Dismiss">✕</button></span>';t.appendChild(c);
+    Q('#bxax').onclick=()=>{ls('cc_inst','1');c.remove();};
+    Q('#bxai').onclick=()=>{if(dip){dip.prompt();dip=null;ls('cc_inst','1');c.remove();}else toast('Tap Share (or the ⋮ menu), then “Add to Home Screen”.');};}
+}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+new MutationObserver(()=>{if(isA()&&Q('#bkb2')&&!Q('#bxq'))try{run();}catch(e){fail(e);}}).observe(document.body,{childList:true});
+})();
+</script>
+
 </body>
 </html>
