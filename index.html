@@ -2919,7 +2919,11 @@ function smallFix(){const p=posts[idx],back=idx;
   Q('#axg').onclick=()=>{const t=Q('#axt').value.trim();if(!t)return Q('#axt').focus();d.close();finish(p,true,'Approved with a small fix: '+t,back);};}
 function suggest(){const p=posts[idx],back=idx;
   const d=open(`<h2 style="margin-top:0">Suggest wording</h2><label>Current</label><div class="card" style="white-space:pre-wrap">${esc(p.caption||'')}</div><label for="axw">Your version</label><textarea id="axw" rows="6">${esc(p.caption||'')}</textarea><div class="row" style="margin-top:10px"><button class="p" type="button" id="axg">Send suggestion</button></div>`);
-  Q('#axg').onclick=()=>{const t=Q('#axw').value.trim();if(!t||t===(p.caption||'').trim())return toast('Change the wording first.');d.close();finish(p,false,'Suggested wording: '+t,back);};}
+  Q('#axg').onclick=async()=>{const t=Q('#axw').value.trim();if(!t||t===(p.caption||'').trim())return toast('Change the wording first.');
+    Q('#axg').disabled=true;
+    const r=await sb.from('caption_suggestions').insert({post_id:p.id,client_id:p.client_id||cid,author_id:user.id,suggested_caption:t,base_caption:p.caption||''});
+    if(r.error){Q('#axg').disabled=false;return alert('Could not send your suggestion: '+r.error.message);}
+    d.close();try{window.sgBust&&window.sgBust();}catch(e){}toast('Suggestion sent. Your social media manager will review it.');clientView();};}
 
 /* 4 (admin side). Use this wording */
 function useBtns(){
@@ -3432,6 +3436,91 @@ function tidy(){
 }
 let t=null;new MutationObserver(()=>{if(t)return;t=requestAnimationFrame(()=>{t=null;tidy();});}).observe(document.getElementById('app'),{childList:true,subtree:true});
 tidy();
+})();
+</script>
+
+<style>
+.sgp{margin:12px 0;padding:12px;border:1px solid var(--acc);border-radius:12px;background:color-mix(in srgb,var(--acc) 6%,var(--card))}
+.sgp .sgt{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0}
+.sgp small{color:var(--mute)}
+.sgn{margin:10px 0;padding:8px 12px;border-radius:10px;background:var(--pe-bg);color:var(--pe-fg);font-size:14px}
+.sgn .sgt{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px;opacity:.95}
+</style>
+<script>
+/* Caption suggestions: clients suggest new wording (saved in caption_suggestions); you accept or dismiss it in the post form. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('suggest',e);
+const open_=r=>!r.resolved_at;
+let cache={},busy={};
+window.sgBust=()=>{cache={};};
+async function get(client){
+  const c=cache[client];if(c&&Date.now()-c.t<45000)return c.rows;
+  if(busy[client])return c?c.rows:[];busy[client]=true;
+  try{const r=await sb.from('caption_suggestions').select('*').eq('client_id',client).order('created_at',{ascending:false});
+    const rows=r.error?[]:(r.data||[]).filter(open_);cache[client]={t:Date.now(),rows};return rows;}
+  catch(e){fail(e);return [];}finally{busy[client]=false;}}
+const when=t=>new Date(t).toLocaleString('en',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+
+/* ---- admin: panel inside the post form ---- */
+async function panel(p){
+  if(!isA()||!p||!p.id)return;
+  const host=Q('#cmx');if(!host||Q('#sgp'))return;
+  const box=document.createElement('div');box.id='sgp';host.before(box);
+  async function draw(){
+    const r=await sb.from('caption_suggestions').select('*').eq('post_id',p.id).order('created_at',{ascending:false});
+    if(!Q('#sgp'))return;
+    const rows=(r.data||[]).filter(open_);
+    if(!rows.length){box.innerHTML='';return;}
+    box.innerHTML=rows.map(x=>`<div class="sgp" data-id="${esc(x.id)}"><b>Client suggested new wording</b> <small>${esc(when(x.created_at))}</small><div class="sgt">${esc(x.suggested_caption||'')}</div>${(x.base_caption||'')!==(p.caption||'')?'<small>Note: the caption has changed since they wrote this.</small><br>':''}<div class="row" style="margin-top:6px"><button type="button" class="p sga">Accept and use it</button><button type="button" class="sgd">Dismiss</button></div></div>`).join('');
+    box.querySelectorAll('.sgp').forEach(el=>{const id=el.dataset.id;
+      el.querySelector('.sga').onclick=async()=>{el.querySelectorAll('button').forEach(b=>b.disabled=true);
+        const u=await sb.rpc('accept_caption_suggestion',{p_id:id});
+        if(u.error){el.querySelectorAll('button').forEach(b=>b.disabled=false);return alert('Could not accept: '+u.error.message);}
+        cache={};await loadPosts();Q('#dlg').close();adminView();toast('Caption updated from the suggestion.');
+        const fresh=posts.find(x=>x.id===p.id);if(fresh)postForm(fresh);};
+      el.querySelector('.sgd').onclick=async()=>{const u=await sb.rpc('dismiss_caption_suggestion',{p_id:id});
+        if(u.error)return alert('Could not dismiss: '+u.error.message);cache={};toast('Suggestion dismissed.');draw();};});
+  }
+  draw();
+}
+const _pf=window.postForm;
+window.postForm=function(p){const r=_pf.apply(this,arguments);try{panel(p);}catch(e){fail(e);}return r;};
+
+/* ---- admin: badge on calendar chips + live toast ---- */
+async function badges(){
+  if(!isA()||!cid)return;
+  const chips=[...document.querySelectorAll('.chip[data-id]:not([data-sg]),.bcard[data-id]:not([data-sg])')];if(!chips.length)return;
+  const rows=await get(cid),ids=new Set(rows.map(r=>r.post_id));
+  chips.forEach(c=>{c.dataset.sg='1';if(!ids.has(c.dataset.id)||c.querySelector('.sgb'))return;
+    const b=document.createElement('span');b.className='sb b-Pending sgb';b.textContent='Suggestion';b.title='The client suggested new wording';c.appendChild(b);});
+}
+let live=null;
+function listen(){
+  if(live||!isA()||!sb.channel)return;
+  live=sb.channel('live-suggestions').on('postgres_changes',{event:'INSERT',schema:'public',table:'caption_suggestions'},pl=>{
+    const n=pl.new||{};if(n.author_id===(user&&user.id))return;cache={};
+    const nm=((clients.find(c=>c.id===n.client_id))||{}).name||'A client';
+    toast(nm+' suggested new wording for a post.');
+    if(n.client_id===cid){document.querySelectorAll('[data-sg]').forEach(e=>e.removeAttribute('data-sg'));badges();}
+  }).subscribe();
+}
+
+/* ---- client: show their open suggestion on the post, with Withdraw ---- */
+async function note(){
+  if(isA()||!me||lv!==false)return;
+  const p=posts[idx],card=Q('#cm>.card');if(!p||!card||card.querySelector('.sgn'))return;
+  const rows=(await get(p.client_id||cid)).filter(r=>r.post_id===p.id&&r.author_id===(user&&user.id));
+  if(!rows.length||posts[idx]!==p||card.querySelector('.sgn'))return;
+  const x=rows[0],el=document.createElement('div');el.className='sgn';el.setAttribute('role','status');
+  el.innerHTML=`<b>You suggested new wording</b> <small>${esc(when(x.created_at))}</small> · waiting for your social media manager<div class="sgt">${esc(x.suggested_caption||'')}</div><button type="button" style="min-height:0;padding:4px 12px;margin-top:6px">Withdraw</button>`;
+  const anchor=card.querySelector('.stickybar')||card.querySelector('#upx')||card.querySelector('#cmx');anchor.before(el);
+  el.querySelector('button').onclick=async()=>{const d=await sb.from('caption_suggestions').delete().eq('id',x.id);
+    if(d.error)return alert('Could not withdraw: '+d.error.message);cache={};el.remove();toast('Suggestion withdrawn.');};
+}
+
+let raf=0;
+new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{if(!me)return;listen();badges();note();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
 })();
 </script>
 <script>
