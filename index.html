@@ -994,7 +994,7 @@ const seenGet=c=>{try{return localStorage.getItem('seen:'+c)||'1970-01-01T00:00:
 const seenSet=c=>{try{localStorage.setItem('seen:'+c,new Date().toISOString());}catch(e){}};
 function applyBrand(){const r=document.documentElement.style;document.body.classList.toggle('client',!!(me&&me.role!=='admin'));
   if(me&&BRAND)r.setProperty('--brand',BRAND);else r.removeProperty('--brand');
-  if(me&&me.role==='client'&&BRAND){r.setProperty('--acc',BRAND);const n=parseInt(BRAND.slice(1),16),L=(0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255;r.setProperty('--accink',L>0.6?'#14151f':'#ffffff');}
+  if(me&&BRAND){r.setProperty('--acc',BRAND);const n=parseInt(BRAND.slice(1),16),L=(0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255;r.setProperty('--accink',L>0.6?'#14151f':'#ffffff');}
   else{r.removeProperty('--acc');r.removeProperty('--accink');}}
 function checks(p){const td=iso(new Date()),a=[],done=p.status==='Posted';
   if(p.approval==='Changes requested')a.push('Client asked for changes');
@@ -1422,7 +1422,7 @@ async function showHistory(pid){const b=$('#hsb');if(!b)return;b.textContent='Lo
     return `<div class="cm">${esc(t)}<br><small>${new Date(h.changed_at).toLocaleString()} \u00b7 ${who(h)}</small></div>`;}).join('')||'<div class="cm"><small>No history yet.</small></div>';}
 
 /* ---------- Client ---------- */
-function weekView(m){
+function clientWeekView(m){
   const td=iso(new Date()),end=addDays(td,6),fmt=ds=>new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
   const byDT=(a,b)=>((a.post_date||'9999')+(a.post_time||'')).localeCompare((b.post_date||'9999')+(b.post_time||''));
   const live=posts.filter(p=>p.post_date&&p.post_date>=td&&p.post_date<=end&&p.status!=='Posted').sort(byDT);
@@ -1474,7 +1474,7 @@ function clientView(){
   $('#topb').innerHTML=(lv==='ideas'||lv==='week')?'':needsBanner()+progress(posts)+(lv?akey():'');if($('#gonx'))$('#gonx').onclick=e=>{lv=false;idx=+e.currentTarget.dataset.i;clientView();};
   const m=$('#cm');
   if(!posts.length&&lv!=='ideas'){m.innerHTML='<div class="card" style="text-align:center;padding:32px"><div style="font-size:44px">🗓️</div><h2 style="margin:8px 0">Nothing here yet</h2><p style="color:var(--mute);margin:0">Your social media manager is preparing your first posts. They will show up here as soon as they are ready.</p></div>';return;}
-  if(lv) return lv==='week'?weekView(m):lv==='ideas'?ideaBank(m):lv==='cal'?calView(m):lv==='feed'?clientFeed(m):listView(m);
+  if(lv) return lv==='week'?clientWeekView(m):lv==='ideas'?ideaBank(m):lv==='cal'?calView(m):lv==='feed'?clientFeed(m):listView(m);
   idx=Math.min(idx,posts.length-1);
   const p=posts[idx],k=p.approval==='Changes requested'?'Changes':p.approval;
   const when=p.post_date?new Date(p.post_date+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}):'No date';
@@ -2689,34 +2689,15 @@ HTMLDialogElement.prototype.showModal=function(){const r=_sm.apply(this,argument
 Q('#dlg').addEventListener('close',()=>setTimeout(layers,0));
 new MutationObserver(()=>layers()).observe(document.body,{childList:true});
 const _cv=window.clientView;
-window.clientView=function(){const r=_cv.apply(this,arguments);try{sync();}catch(e){console.error('hist',e);}return r;};
+window.clientView=function(){const r=_cv.apply(this,arguments);try{sync();}catch(e){console.error('hist',e);}try{window.ccSeen();}catch(e){}return r;};
 const _lg=window.loginView;
 window.loginView=function(){inited=false;pop=false;waiting=null;stack=['cal'];return _lg.apply(this,arguments);};
-
-/* ---------- approve by ---------- */
-function abInfo(ds){
-  if(!ds)return null;
-  const n=Math.round((new Date(ds+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);
-  if(n<0)return {t:'Approval was due '+(n===-1?'yesterday':(-n)+' days ago'),late:true};
-  const wd=new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long'});
-  return {t:'Approve by '+(n===0?'today':n===1?'tomorrow':n<7?wd:new Date(ds+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'})),late:false};}
-const abEl=(ds)=>{const i=abInfo(ds);return i?`<div class="abl${i.late?' late':''}" data-ab="1">${i.late?'⚠ ':'⏰ '}${esc(i.t)}</div>`:'';};
-function abRun(){
-  if(!isCli()||typeof AB==='undefined'||!AB)return;
-  const pend=p=>p&&p.approval==='Pending'&&p.status!=='Posted'&&p.approve_by;
-  const c=Q('#cm>.card');
-  if(c&&lv===false&&!c.querySelector('[data-ab]')){const p=posts[idx];if(pend(p)){const r=c.querySelector(':scope>.row');if(r)r.insertAdjacentHTML('afterend',abEl(p.approve_by));}}
-  document.querySelectorAll('#cm button.card[data-i]:not([data-abx])').forEach(b=>{b.dataset.abx='1';const p=posts[+b.dataset.i];if(!pend(p))return;
-    const d=b.querySelector(':scope>div:last-child');if(d)d.insertAdjacentHTML('beforebegin',abEl(p.approve_by));});
-  const nb=Q('#topb .nb:not(.done)');
-  if(nb&&!nb.querySelector('[data-ab]')){const e=posts.filter(pend).map(p=>p.approve_by).sort()[0];if(e){const d=nb.firstElementChild;if(d)d.insertAdjacentHTML('beforeend',abEl(e));}}}
 
 /* ---------- last seen ---------- */
 let lastTouch=0;
 window.ccSeen=async function(){
   if(!isCli()||Date.now()-lastTouch<30*60*1000)return;lastTouch=Date.now();
   try{await sb.from('client_seen').upsert({user_id:user.id,client_id:cid,seen_at:new Date().toISOString()},{onConflict:'user_id'});}catch(e){}};
-/* last-seen tracking is off: the client_seen table does not exist */
 const seenC={};
 const ago=t=>{const m=Math.round((Date.now()-t)/6e4);if(m<2)return 'just now';if(m<60)return m+' minutes ago';const h=Math.round(m/60);if(h<24)return h+(h===1?' hour':' hours')+' ago';const d=Math.round(h/24);return d+(d===1?' day':' days')+' ago';};
 function seenTxt(r){return r==='na'?'':r?`👁 Client last opened the calendar ${ago(r)} (${new Date(r).toLocaleString('en',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}).`:'👁 The client has not opened the calendar yet.';}
@@ -3405,11 +3386,6 @@ body:not(:has(.login))::before{display:none!important}
 body{background:var(--bg)!important}
 h1,h2,h3,#sbar .lo,.big{font-family:'Plus Jakarta Sans','DM Sans',system-ui,sans-serif;letter-spacing:-.01em}
 main h2{font-weight:800}
-body.dhl{--acc:#d40511;--accink:#fff}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]) body.dhl{--acc:#ffcc00;--accink:#1d2030}}
-html[data-theme=dark] body.dhl{--acc:#ffcc00;--accink:#1d2030}
-html[data-theme=light] body.dhl{--acc:#d40511;--accink:#fff}
-body.dhl #sbar .ni.on{background:var(--acc);color:var(--accink)}
 body.adm main{max-width:1640px;margin:0;padding:20px 28px}
 .grid{gap:8px;background:transparent;border:0;overflow:visible}
 .grid .dow{background:none;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:11px}
@@ -3429,6 +3405,13 @@ details.hm>summary{list-style:none;cursor:pointer;border:1px solid var(--line);b
 details.hm>summary::-webkit-details-marker{display:none}details.hm>summary::after{content:" \25be"}
 details.hm .hmi{position:absolute;right:0;top:112%;z-index:40;display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;min-width:190px;box-shadow:0 10px 30px #0005}
 details.hm .hmi button{text-align:left;width:100%}
+/* More menu fix: keep the label and arrow on one line, never let the header squash the button */
+details.hm,details.menu{flex:none}
+details.hm>summary,details.menu>summary{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-height:36px;padding:6px 14px;font-size:14px;line-height:1.2;border-radius:999px;user-select:none}
+details.hm>summary::after,details.menu>summary::after{content:"\25be"!important;margin:0;line-height:1}
+details.hm[open]>summary::after,details.menu[open]>summary::after{content:"\25b4"!important}
+details.hm .hmi{max-height:70vh;overflow:auto;max-width:92vw}
+@media(max-width:640px){details.hm .hmi{position:fixed;left:12px;right:12px;top:64px;min-width:0}}
 .login{padding:34px;box-shadow:0 20px 60px #0006}
 .tcp,.tdn{min-height:48px;font-size:16px}
 </style>
@@ -3444,13 +3427,17 @@ function tidy(){
       const box=d.querySelector('.hmi');mv.forEach(b=>box.appendChild(b));const o=h.querySelector('#out')||null;h.insertBefore(d,o);
       d.onclick=e=>{if(e.target.closest('button'))setTimeout(()=>d.removeAttribute('open'),0);};}}
   try{const nm=((typeof clients!=='undefined'&&clients.find(c=>c.id===cid))||{}).name||(typeof CNAME!=='undefined'?CNAME:'')||'';
-    document.body.classList.toggle('dhl',/dhl|ship\s*utah/i.test(nm));
     document.querySelectorAll('.chip').forEach(c=>{const p=c.dataset.id?posts.find(x=>x.id===c.dataset.id):c.dataset.i!==undefined?posts[+c.dataset.i]:null;
       const col=p&&p.account&&accCol(p);if(col)c.style.setProperty('--ac',col);});}catch(e){}
 }
 let t=null;new MutationObserver(()=>{if(t)return;t=requestAnimationFrame(()=>{t=null;tidy();});}).observe(document.getElementById('app'),{childList:true,subtree:true});
 tidy();
 })();
+</script>
+<script>
+/* close any open "More" menu when you click elsewhere or press Escape */
+document.addEventListener('click',e=>{document.querySelectorAll('details.hm[open],details.menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('details.hm[open],details.menu[open]').forEach(d=>d.removeAttribute('open'));});
 </script>
 <style>dialog.dz{outline:3px dashed var(--acc);outline-offset:-8px}</style>
 <script>
