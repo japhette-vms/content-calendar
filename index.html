@@ -3327,5 +3327,70 @@ function run(){
 let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
 })();
 </script>
+<script>
+(function(){
+const Q=s=>document.querySelector(s),addD=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
+const mon=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));
+const nice=ds=>new Date(ds+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'});
+const bkAge=()=>{try{const t=localStorage.getItem('cc_bk');return t?Math.floor((Date.now()-(+t))/864e5):999;}catch(e){return 999;}};
+const _ec=window.exportCsv;window.exportCsv=function(){try{localStorage.setItem('cc_bk',String(Date.now()));}catch(e){}return _ec.apply(this,arguments);};
+const bkWarn=()=>bkAge()>7?'<div class="warn" id="bkw">Your last backup was '+(bkAge()>900?'never made':bkAge()+' days ago')+'. <button type="button" id="bkx" style="margin-left:6px">Export a backup now</button></div>':'';
+function bind(){const b=Q('#bkx');if(b)b.onclick=()=>{window.exportCsv();setTimeout(()=>{const w=Q('#bkw');if(w)w.remove();},300);};}
+async function todayView(){
+  const td=iso(new Date()),tm=iso(addD(new Date(),1));
+  const ps=posts.filter(p=>p.post_date===td||p.post_date===tm).sort((a,b)=>(a.post_date+(a.account||'')+(a.post_time||'')).localeCompare(b.post_date+(b.account||'')+(b.post_time||'')));
+  const media={};
+  if(ps.length){const r=await sb.from('post_media').select('post_id,drive_link,status').in('post_id',ps.map(p=>p.id));(r.data||[]).forEach(m=>{if(m.status==='done'&&m.drive_link&&!media[m.post_id])media[m.post_id]=m.drive_link;});}
+  const card=p=>{const l=media[p.id]||(/^https?:\/\//i.test(p.visual||'')?p.visual:'');
+    return `<div class="card" style="margin-bottom:10px"><div class="row"><b>${acctDot(p)}${esc(p.platform)}${acctLabel(p)}</b><span style="color:var(--mute);font-size:13px">${p.post_date===td?'Today':'Tomorrow'}${p.post_time?' \u00b7 '+esc(p.post_time.slice(0,5)):''}</span><span class="sb s-${esc(p.status)}" style="margin-left:auto">${esc(p.status)}</span></div><div class="cap">${p.caption?esc(p.caption):'<i style="color:var(--mute)">No caption yet</i>'}</div>${p.hashtags?`<div class="ptags">${esc(p.hashtags)}</div>`:''}<div class="row" style="margin-top:10px"><button type="button" class="p tcp" data-id="${p.id}">Copy caption + hashtags</button>${l?`<a class="lnk" href="${esc(l)}" target="_blank" rel="noopener noreferrer">Open photo</a>`:''}${p.status==='Posted'?'<span class="sb s-Posted">Posted \u2713</span>':`<button type="button" class="tdn" data-id="${p.id}">Mark as posted</button>`}<button type="button" class="ted" data-id="${p.id}">Edit</button></div></div>`;};
+  const gaps=[],w0=mon(new Date());
+  for(let i=0;i<4;i++){const a=iso(addD(w0,i*7)),b=iso(addD(w0,i*7+6));ACCOUNTS.forEach(ac=>{const g=+ac.goal||0;if(!g)return;const n=posts.filter(p=>p.platform===ac.platform&&p.account===ac.name&&p.post_date>=a&&p.post_date<=b).length;if(n<g)gaps.push(`<div class="cm"><b>${acctDot({platform:ac.platform,account:ac.name})}${esc(ac.platform)} \u00b7 ${esc(ac.name)}</b> \u00b7 week of ${nice(a)}: ${n} of ${g} planned <span class="sb b-Pending">${g-n} to add</span></div>`);});}
+  $('#app').innerHTML=miniHead()+`<main><div class="row" style="margin-bottom:6px"><h2 style="margin:0;flex:1">Post today</h2><button type="button" id="tbk">Back to calendar</button></div>${bkWarn()}
+  <div class="row noprint" style="margin:10px 0"><button type="button" id="trm">Approval reminder</button><button type="button" id="trp">Account report</button></div>
+  ${ps.length?ps.map(card).join(''):'<div class="empty">Nothing planned for today or tomorrow.</div>'}
+  <h3>Gaps in the next 4 weeks</h3><div class="card">${gaps.join('')||'<span style="color:var(--mute)">'+(ACCOUNTS.length?'Every account is on target. \ud83c\udf89':'Add your accounts and weekly goals in Settings to see gaps.')+'</span>'}</div></main>`;
+  miniBind(todayView);bind();
+  $('#tbk').onclick=()=>{vw='month';adminView();};$('#trm').onclick=remind;$('#trp').onclick=report;
+  const re=async()=>{await loadPosts();todayView();};
+  document.querySelectorAll('.tcp').forEach(b=>b.onclick=()=>{const p=posts.find(x=>x.id===b.dataset.id);navigator.clipboard.writeText((p.caption||'')+(p.hashtags?'\n\n'+p.hashtags:'')).then(()=>toast('Copied. Paste it into the post.'),()=>alert('Could not copy. Open the post and copy by hand.'));});
+  document.querySelectorAll('.ted').forEach(b=>b.onclick=()=>postForm(posts.find(x=>x.id===b.dataset.id)));
+  document.querySelectorAll('.tdn').forEach(b=>b.onclick=async()=>{const u=prompt('Paste the live post link (or leave empty):');if(u===null)return;const f={status:'Posted'};if(u.trim())f.live_link=u.trim();const r=await sb.from('posts').update(f).eq('id',b.dataset.id);if(r.error)return alert('Could not save: '+r.error.message);re();});
+}
+function remind(){const d=Q('#dlg'),pend=posts.filter(p=>p.approval==='Pending'&&p.post_date&&p.status!=='Posted').sort((a,b)=>a.post_date.localeCompare(b.post_date));
+  const nm=(clients.find(c=>c.id===cid)||{}).name||'';
+  const t=pend.length?`Hi ${nm}! You have ${pend.length} post${pend.length===1?'':'s'} waiting for your approval. The first one goes live on ${nice(pend[0].post_date)}. Please review them here: ${location.origin+location.pathname}\nThank you!`:`Hi ${nm}! Everything is approved. Thank you!`;
+  d.innerHTML='<h2 style="margin-top:0">Approval reminder</h2><textarea id="rmt" rows="6"></textarea><div class="row" style="margin-top:10px"><button type="button" class="p" id="rmc">Copy message</button><button type="button" id="rmx">Close</button></div>';
+  $('#rmt').value=t;d.showModal();$('#rmx').onclick=()=>d.close();$('#rmc').onclick=()=>navigator.clipboard.writeText($('#rmt').value).then(()=>toast('Copied'));}
+function report(){const d=Q('#dlg');
+  d.innerHTML=`<h2 style="margin-top:0">Account report</h2><label>Account</label><select id="ra"><option value="">All accounts</option>${ACCOUNTS.map((a,i)=>`<option value="${i}">${esc(a.platform)} \u00b7 ${esc(a.name)}</option>`).join('')}</select><label>Month</label><input type="month" id="rm" value="${iso(new Date()).slice(0,7)}"><div class="row" style="margin-top:12px"><button type="button" class="p" id="rgo">Open printable report</button><button type="button" id="rx">Close</button></div>`;
+  d.showModal();$('#rx').onclick=()=>d.close();
+  $('#rgo').onclick=()=>{const a=ACCOUNTS[+$('#ra').value],m=$('#rm').value,nm=(clients.find(c=>c.id===cid)||{}).name||'';
+    const rows=posts.filter(p=>p.post_date&&p.post_date.slice(0,7)===m&&(!a||(p.platform===a.platform&&p.account===a.name))).sort((x,y)=>x.post_date.localeCompare(y.post_date));
+    const sum=k=>rows.reduce((t,p)=>t+(+p[k]||0),0),n=v=>(+v||0).toLocaleString();
+    const w=window.open('','_blank');if(!w)return alert('Allow pop-ups for this site to open the report.');
+    w.document.write(`<!doctype html><meta charset="utf-8"><title>Report</title><body style="font:14px system-ui;margin:28px;color:#1d2030"><h1 style="margin:0">${esc(nm)}${a?' \u00b7 '+esc(a.platform)+' \u00b7 '+esc(a.name):''}</h1><p style="color:#6b6f85">${esc(m)} \u00b7 ${rows.length} posts \u00b7 ${rows.filter(p=>p.status==='Posted').length} posted</p><p><b>Reach</b> ${n(sum('reach'))} \u00b7 <b>Likes</b> ${n(sum('likes'))} \u00b7 <b>Comments</b> ${n(sum('comments_count'))} \u00b7 <b>Shares</b> ${n(sum('shares_saves'))} \u00b7 <b>Engagements</b> ${n(sum('engagements'))}</p><table style="border-collapse:collapse;width:100%;font-size:13px"><tr style="text-align:left;border-bottom:2px solid #ccc"><th>Date</th><th>Account</th><th>Format</th><th>Status</th><th>Caption</th><th>Reach</th><th>Eng.</th></tr>${rows.map(p=>`<tr style="border-top:1px solid #ddd"><td>${esc(p.post_date)}</td><td>${esc(p.platform)}${p.account?' \u00b7 '+esc(p.account):''}</td><td>${esc(p.format||'')}</td><td>${esc(p.status)}</td><td>${esc((p.caption||'').slice(0,90))}</td><td>${n(p.reach)}</td><td>${n(p.engagements)}</td></tr>`).join('')}</table></body>`);
+    w.document.close();w.focus();setTimeout(()=>w.print(),400);};}
+function formX(p){const f=Q('#pf');if(!f)return;
+  const hs=Q('#hs'),ac=f.elements.namedItem('account');
+  if(hs&&ac){const all=hsets.slice(),fill=()=>{const a=(ac.value||'').toLowerCase();hs.innerHTML='<option value="">Add a saved hashtag set...</option>'+all.filter(h=>{const n=h.name.toLowerCase();return !ACCOUNTS.some(x=>n.includes(x.name.toLowerCase()))||(a&&n.includes(a));}).map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join('');};ac.addEventListener('change',fill);fill();}
+  if(p&&p.id&&ACCOUNTS.length>1&&Q('#pe')){
+    const others=ACCOUNTS.filter(a=>!(a.platform===p.platform&&a.name===p.account)),box=document.createElement('div');box.className='card';box.style.cssText='margin:12px 0;padding:10px';
+    box.innerHTML=`<b>Also post to\u2026</b> <small style="color:var(--mute)">(copies the saved version)</small><div class="row" style="margin-top:6px">${others.map((a,i)=>`<label style="display:flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" class="apt" value="${i}" style="width:auto;min-height:0">${esc(a.platform)} \u00b7 ${esc(a.name)}</label>`).join('')}</div><button type="button" id="aptb" style="margin-top:8px">Create copies as drafts</button>`;
+    Q('#pe').before(box);
+    box.querySelector('#aptb').onclick=async()=>{const sel=[...box.querySelectorAll('.apt:checked')].map(c=>others[+c.value]);if(!sel.length)return;
+      const rows=sel.map(a=>({client_id:p.client_id||cid,post_date:p.post_date,post_time:p.post_time,platform:a.platform,account:a.name,pillar:p.pillar,format:p.format,campaign:p.campaign,caption:p.caption,visual:p.visual,hashtags:p.hashtags,status:'Draft',approval:'Pending',repost:false}));
+      const r=await sb.from('posts').insert(rows);if(r.error)return alert('Could not create: '+r.error.message);
+      Q('#dlg').close();await loadPosts();adminView();toast(rows.length+' draft'+(rows.length>1?'s':'')+' created');};}
+}
+const _pf=window.postForm;window.postForm=function(p){const r=_pf.apply(this,arguments);try{formX(p||{});}catch(e){console.error('addon',e);}return r;};
+function nav(){const s=Q('#sbar');if(!s||s.querySelector('[data-v=today]'))return;const b=document.createElement('button');b.className='ni'+(vw==='today'?' on':'');b.dataset.v='today';b.innerHTML='<i>\u25b6</i><span>Post today</span>';const lo=s.querySelector('.lo');lo?lo.after(b):s.prepend(b);}
+const _av=window.adminView;
+window.adminView=function(){
+  if(vw==='today'){todayView();setTimeout(nav,0);return;}
+  const r=_av.apply(this,arguments);setTimeout(nav,0);
+  try{const s=Q('.sumrow');if(s&&!Q('#bkw')&&bkWarn()){s.insertAdjacentHTML('beforebegin',bkWarn());bind();}}catch(e){}
+  return r;};
+})();
+</script>
 </body>
 </html>
