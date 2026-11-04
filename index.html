@@ -3211,5 +3211,15 @@ function run(){
 let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
 })();
 </script>
+<style>.cgrid .day[data-ds]{cursor:pointer}.cgrid .day[data-ds]:hover{outline:2px solid var(--acc);outline-offset:-2px}</style>
+<script>
+/* Add-ons 5b: on desktop, clicking a client calendar day opens the same day pop-up the phone gets. */
+document.addEventListener('click',e=>{
+  if(!me||me.role==='admin'||matchMedia('(max-width:640px)').matches)return;
+  const c=e.target.closest&&e.target.closest('.cgrid .day[data-ds]');
+  if(!c||e.target.closest('.cc')||document.getElementById('dlg').open)return;
+  setTimeout(()=>{try{window.dayTap(c.dataset.ds);}catch(x){console.error(x);}},0);
+});
+</script>
 </body>
 </html>
