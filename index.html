@@ -160,6 +160,12 @@ body.client{font-size:16px}body.client .pc .pb{font-size:16px;line-height:1.55}b
 .ibt button{position:absolute;top:2px;right:2px;min-height:0;width:22px;height:22px;padding:0;border-radius:50%;line-height:1}
 .ith{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .ith img{width:84px;height:84px;object-fit:cover;border-radius:10px}
+/* accounts + softer Posted */
+.ad{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;flex:none;vertical-align:1px}
+.s-Posted{background:#cfeedd;color:#0f5a37}
+@media (prefers-color-scheme:dark){.s-Posted{background:#1b4a33;color:#b7f0d1}}
+html[data-theme=dark] .s-Posted{background:#1b4a33;color:#b7f0d1}
+html[data-theme=light] .s-Posted{background:#cfeedd;color:#0f5a37}
 </style>
 </head>
 <body>
@@ -196,6 +202,16 @@ const _alert=window.alert.bind(window);
 window.alert=m=>{const d=document.getElementById('dlg');d&&d.open?_alert(m):toast(String(m));};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const acctLabel=p=>p&&p.account?' \u00b7 '+esc(p.account):'';
+const ACC_PAL=['#e0a100','#2f6bc4','#d6336c','#0f766e','#7c5cd6','#c2410c'];
+const accIdx=p=>ACCOUNTS.findIndex(a=>a.platform===p.platform&&a.name===p.account);
+const accCol=p=>{const i=accIdx(p);return i<0?null:safeCol(ACCOUNTS[i].color||ACC_PAL[i%ACC_PAL.length]);};
+const acctDot=p=>{const c=p&&p.account?accCol(p):null;return c?`<i class="ad" style="background:${c}"></i>`:'';};
+const paceTiles=wk=>{
+  const t=ACCOUNTS.map((a,i)=>{const n=wk.filter(p=>p.platform===a.platform&&p.account===a.name).length;
+    return `<div class="stat"><b>${n} / ${+a.goal||0}</b><i class="ad" style="background:${safeCol(a.color||ACC_PAL[i%ACC_PAL.length])}"></i>${esc(a.platform)} \u00b7 ${esc(a.name)}</div>`;});
+  PLATFORMS.filter(pl=>!ACCOUNTS.some(a=>a.platform===pl)&&(GOALS[pl]??0)>0||!ACCOUNTS.length).forEach(pl=>{
+    t.push(`<div class="stat"><b>${wk.filter(p=>p.platform===pl).length} / ${GOALS[pl]??0}</b>${pl}</div>`);});
+  return t.join('');};
 const tzAb=()=>{try{return new Intl.DateTimeFormat('en',{timeZone:TZ,timeZoneName:'short'}).formatToParts(new Date()).find(x=>x.type==='timeZoneName').value;}catch(e){return '';}};
 const t12=t=>{if(!t)return '';const [h,m]=t.slice(0,5).split(':').map(Number);return ((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h<12?'AM':'PM')+' '+tzAb();};
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -289,7 +305,7 @@ const sbadge=p=>`<span class="sb s-${esc((p.status||'Draft').replace(/\s+/g,'-')
 const apBadge=(p,cl)=>{const k=p.approval==='Changes requested'?'Changes':p.approval;return `<span class="sb b-${esc(k)}">${k==='Pending'?'To approve':k==='Changes'&&cl?'Changes asked':k}</span>`;};
 const PIC={'Instagram':'IG','Facebook':'f','LinkedIn':'in','TikTok':'♪','Google Business Profile':'G'};
 const picon=pl=>`<span class="pi" style="background:${PCOL[pl]||'#888'}" aria-hidden="true">${PIC[pl]||'•'}</span>`;
-let fPil=null,fPlat=null,fCam=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat)||(fCam&&(p.campaign||'').trim()!==fCam);
+let fPil=null,fPlat=null,fCam=null,fAcc=null;const dimmed=p=>(fPil&&p.pillar!==fPil)||(fPlat&&p.platform!==fPlat)||(fAcc&&(p.platform+'|'+(p.account||''))!==fAcc)||(fCam&&(p.campaign||'').trim()!==fCam);
 const progress=(ps,who)=>{const n=ps.length,a=ps.filter(p=>p.approval==='Approved').length;if(!n)return '';return `<div class="progw${a===n?' done':''}"><div style="margin-bottom:4px">${a===n?'All '+n+' posts approved 🎉':a+' of '+n+' posts approved'+(who?' by '+who:'')}</div><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${a}"><div style="width:${a/n*100}%"></div></div></div>`;};
 const rel=ds=>{if(!ds)return '';const n=Math.round((new Date(ds+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);return n<0?(-n===1?'was due yesterday':'was due '+(-n)+' days ago'):n===0?'today':n===1?'tomorrow':'in '+n+' days';};
 const dueChip=p=>{if(!p.due_date||p.approval!=='Pending'||p.status==='Posted')return '';const td=iso(new Date()),late=p.due_date<td,now=p.due_date===td;const d=new Date(p.due_date+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});return `<span class="badge" style="background:${late||now?'#fde2e2':'#fff3d6'};color:${late||now?'#8a1f1f':'#6a4a00'}">${late?'Overdue, was due ':now?'Due today \u00b7 ':'Please approve by '}${esc(d)}</span>`;};
@@ -302,7 +318,7 @@ function flash(v){if(v!=='Approved')return;let f=document.getElementById('flash'
 let selDay=null;
 document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('img.pimg');if(!im||$('#dlg').open)return;const o=document.createElement('div');o.id='lbx';o.innerHTML='<img alt="Post visual enlarged">';o.firstChild.src=im.src.replace('sz=w1000','sz=w2000');const x=()=>{o.remove();document.removeEventListener('keydown',k);};const k=ev=>{if(ev.key==='Escape')x();};o.onclick=x;document.addEventListener('keydown',k);document.body.appendChild(o);});
 const chipHtml=p=>{const pc=safeCol(PILLARS[p.pillar]),th=thumbUrl(p.visual,'w120');
-  return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}${acctLabel(p)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
+  return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${acctDot(p)}${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}${acctLabel(p)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
 function videoEmbed(p){const v=String(p.visual||'').trim();if(!/^https?:\/\//i.test(v))return '';
   const fmt=p.format||'',asp=/^(Reel|Story)$/i.test(fmt)?'9/16':'16/9',box=i=>`<div class="vbox" style="aspect-ratio:${asp}">${i}</div>`;
   const open=`<div class="pb"><a class="lnk" href="${esc(v)}" target="_blank" rel="noopener noreferrer">Open the video ↗</a></div>`;let m;
@@ -368,7 +384,7 @@ function calView(m){
   const y=month.getFullYear(),mo=month.getMonth(),first=new Date(y,mo,1),start=new Date(y,mo,1-((first.getDay()+6)%7)),todayS=iso(new Date());
   let cells='';
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);if(i>=35&&d.getMonth()!==mo)break;const ds=iso(d);
-    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}" data-ds="${ds}"><span>${d.getDate()}</span><div class="dots">${posts.filter(p=>p.post_date===ds).map(p=>`<i class="dt dt-${p.approval==='Changes requested'?'Changes':p.approval}"></i>`).join('')}</div>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc ap-${p.approval==='Approved'?'ok':p.approval==='Pending'?'pn':'ch'}" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1">${picon(p.platform)}<span class="ctx">${esc(p.platform)}${acctLabel(p)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
+    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}" data-ds="${ds}"><span>${d.getDate()}</span><div class="dots">${posts.filter(p=>p.post_date===ds).map(p=>`<i class="dt dt-${p.approval==='Changes requested'?'Changes':p.approval}"></i>`).join('')}</div>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc ap-${p.approval==='Approved'?'ok':p.approval==='Pending'?'pn':'ch'}" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}">${(()=>{const t=thumbUrl(p.visual,'w120');return t?`<img class="th" src="${t}" alt="" loading="lazy" onerror="this.remove()">`:'';})()}<span class="cl1">${acctDot(p)}${picon(p.platform)}<span class="ctx">${esc(p.platform)}${acctLabel(p)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="fvb3">Feed</button></div>
   <div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="cgrid" style="margin-top:10px">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
@@ -384,7 +400,7 @@ function calView(m){
 }
 const viewbar=cur=>`<div class="row noprint" style="margin:0 0 10px"><div class="seg" role="group" aria-label="View">${[['month','Calendar'],['list','List'],['feed','Feed']].map(([v,l])=>`<button type="button" class="vb${v===cur?' on':''}" data-v="${v}">${l}</button>`).join('')}</div>${cur==='month'?'<button type="button" id="cpn" style="margin-left:auto">Copy to next month</button>':''}</div>`;
 function bindVB(){document.querySelectorAll('.vb').forEach(b=>b.onclick=()=>{vw=b.dataset.v;adminView();});}
-function bindLegend(){document.querySelectorAll('.lg').forEach(b=>b.onclick=()=>{if(b.dataset.pil!==undefined)fPil=fPil===b.dataset.pil?null:b.dataset.pil;else fPlat=fPlat===b.dataset.plat?null:b.dataset.plat;adminView();});}
+function bindLegend(){document.querySelectorAll('.lg').forEach(b=>b.onclick=()=>{if(b.dataset.acc!==undefined)fAcc=fAcc===b.dataset.acc?null:b.dataset.acc;else if(b.dataset.pil!==undefined)fPil=fPil===b.dataset.pil?null:b.dataset.pil;else fPlat=fPlat===b.dataset.plat?null:b.dataset.plat;adminView();});}
 const miniHead=()=>head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button class="p" id="np">New post</button>`);
 function miniBind(re){bindOut();bindVB();$('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();re();};$('#np').onclick=()=>postForm();}
 let ls={k:'post_date',d:1,q:'',pf:'',st:'',ap:'',pi:''};
@@ -536,7 +552,7 @@ function adminView(){
     cells+=`<div class="day${d.getMonth()!==m?' off':''}${ds===todayS?' today':''}" data-date="${ds}"><span>${d.getDate()}</span>${keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:11px">★ ${esc(k.label)}</div>`).join('')}${chips}</div>`;
   }
   $('#app').innerHTML=head(`<select id="cs" style="width:auto" aria-label="Client">${clients.map(c=>`<option value="${c.id}"${c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select><button id="allb">All clients</button><button id="vwb">Week view</button><button id="rpb">Report</button><button id="yrb">Year</button><button id="icb">Calendar file</button><button id="insb">Insights</button><button id="mlb">Media</button><button id="st">Settings</button><button class="p" id="np">New post</button>`)+
-  `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
+  `<main><div class="row"><button id="pm" aria-label="Previous month">‹</button><div style="flex:1;text-align:center"><h2 style="margin:0">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><div style="color:var(--mute);font-size:13px">${mp.length} post${mp.length===1?'':'s'} \u00b7 ${mp.filter(p=>p.approval==='Pending').length} awaiting client approval${need?' \u00b7 '+need+' need attention':''}</div></div><button id="nm" aria-label="Next month">›</button></div>
   ${viewbar('month')}<div class="sumrow"><b>${mp.length} post${mp.length===1?'':'s'}</b>${stList().map(x=>`<span class="sb s-${x.replace(/ /g,'-')}">${cnt(x)} ${x==='Approved'?'approved by you':x}</span>`).join('')}<span class="sb b-Approved">${mp.filter(p=>p.approval==='Approved').length} approved by client</span><span class="sb b-Pending">${mp.filter(p=>p.approval==='Pending').length} awaiting client</span><span class="sb b-Changes">${need} need attention</span></div>
   ${tiles?`<div class="stats">${tiles}</div>`:''}
   ${nc}
@@ -544,10 +560,10 @@ function adminView(){
   ${clients.length?'':'<div class="warn">No clients yet. Use Tools, Add a client to invite your first one.</div>'}
   ${progress(mp,'client')}${mp.length?'':'<div class="empty">No posts planned for this month yet. <button class="p np2" type="button">Add the first post</button></div>'}
   <div class="grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
-  <div class="legend noprint" role="group" aria-label="Filter the calendar">${Object.entries(PILLARS).map(([k,c])=>`<button type="button" class="lg${fPil===k?' on':''}" data-pil="${esc(k)}"><i style="background:${c}"></i>${esc(k)}</button>`).join('')}<span>|</span>${PLATFORMS.map(k=>`<button type="button" class="lg${fPlat===k?' on':''}" data-plat="${esc(k)}">${picon(k)}${esc(k)}</button>`).join('')}<span class="sb b-Approved">Client OK</span><span class="sb b-Changes">Changes / no caption</span></div>
+  <div class="legend noprint" role="group" aria-label="Filter the calendar">${Object.entries(PILLARS).map(([k,c])=>`<button type="button" class="lg${fPil===k?' on':''}" data-pil="${esc(k)}"><i style="background:${c}"></i>${esc(k)}</button>`).join('')}<span>|</span>${PLATFORMS.map(k=>`<button type="button" class="lg${fPlat===k?' on':''}" data-plat="${esc(k)}">${picon(k)}${esc(k)}</button>`).join('')}${ACCOUNTS.length?'<span>|</span>'+ACCOUNTS.map((a,i)=>{const k=a.platform+'|'+a.name;return `<button type="button" class="lg${fAcc===k?' on':''}" data-acc="${esc(k)}"><i style="background:${safeCol(a.color||ACC_PAL[i%ACC_PAL.length])}"></i>${esc(a.platform)} \u00b7 ${esc(a.name)}</button>`;}).join(''):''}<span class="sb b-Approved">Client OK</span><span class="sb b-Changes">Changes / no caption</span></div>
   <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${esc(p.platform)}${acctLabel(p)}</b> ${sbadge(p)} <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
   <p class="noprint" style="color:var(--mute);font-size:13px;margin:0">Tip: drag a post onto another day to reschedule it.</p>
-  <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}${chk}</main>`;
+  <h3>This week against goals</h3><div class="pace">${paceTiles(wk)}</div>${rdy}${chk}</main>`;
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
   $('#pm').onclick=()=>{month.setMonth(month.getMonth()-1);adminView();};
@@ -587,7 +603,7 @@ function weekView(){
   `<main><div class="pt"><h2 style="margin:0">${esc(cname)} – content plan</h2></div>
   <div class="row noprint"><button id="pw" aria-label="Previous week">‹</button><h2 style="margin:0;flex:1;text-align:center">${range}</h2><button id="nw" aria-label="Next week">›</button></div>
   <h2 class="pt" style="text-align:center">${range}</h2>
-  <div class="pace" style="margin:12px 0">${PLATFORMS.map(pl=>`<div class="stat"><b>${wk.filter(p=>p.platform===pl).length} / ${GOALS[pl]??0}</b>${pl}</div>`).join('')}</div>
+  <div class="pace" style="margin:12px 0">${paceTiles(wk)}</div>
   ${body}</main>`;
   bindOut();
   $('#cs').onchange=async e=>{cid=e.target.value;await loadPosts();adminView();};
@@ -786,7 +802,9 @@ function matchMeta(rows,posts,page){
       const L=Math.min(n.length,nr.length,40);
       if(n.slice(0,L)!==nr.slice(0,L))return;
       const d=days(r.date,p.post_date);
-      if(d<=3&&d<bd){best=p;bd=d;}});
+      const am=p.account&&r.page&&(mnorm(r.page).includes(mnorm(p.account))||mnorm(p.account).includes(mnorm(r.page)));
+      const dd=d-(am?0.5:0);
+      if(d<=3&&dd<bd){best=p;bd=dd;}});
     if(best){used.add(best.id);matched.push({r,p:best});}else unmatched.push(r);
   });
   return {matched,unmatched};}
@@ -1137,11 +1155,12 @@ async function postForm(p={}){
 function settingsForm(){
   if(!cid) return alert('Add a client first.');
   const d=$('#dlg'),pl=[...Object.entries(PILLARS),['','#6b6f85']];
+  const accRows=[...ACCOUNTS,{platform:'Facebook',name:'',color:'',goal:3}];
   d.innerHTML=`<form id="sf"><h2 style="margin-top:0">Settings for ${esc(clients.find(c=>c.id===cid)?.name)}</h2>
   <h3>Weekly post goals</h3><div class="g2">${PLATFORMS.map(p=>`<div><label>${p}</label><input type="number" min="0" name="g:${p}" value="${GOALS[p]??0}"></div>`).join('')}</div>
   <h3>Accounts / pages</h3>
-  <textarea name="accts" rows="4" placeholder="Facebook | Ship Utah&#10;Facebook | DHL&#10;Instagram | DHL">${esc(ACCOUNTS.map(a=>a.platform+' | '+a.name).join('\n'))}</textarea>
-  <p style="font-size:12px;color:var(--mute);margin:2px 0 0">One per line: Platform | Account name. These appear in the Account box when you make a post.</p>
+  ${accRows.map((a,i)=>`<div class="row" style="margin-top:6px"><select name="ap${i}" style="width:auto" aria-label="Platform">${opts(PLATFORMS,a.platform)}</select><input name="an${i}" value="${esc(a.name)}" placeholder="Account name, e.g. Ship Utah" style="flex:1;min-width:140px"><input type="color" name="ac${i}" value="${safeCol(a.color||ACC_PAL[i%ACC_PAL.length])}" style="width:56px;padding:2px" aria-label="Colour"><input type="number" min="0" name="ag${i}" value="${a.goal??0}" style="width:70px" aria-label="Posts per week" title="Posts per week"></div>`).join('')}
+  <p style="font-size:12px;color:var(--mute);margin:2px 0 0">Platform, account name, colour and posts per week. Use the empty last row to add an account, save, then reopen Settings to add another.</p>
   <h3>Content pillars</h3>${pl.map(([n,c],i)=>`<div class="row" style="margin-top:6px"><input name="pn${i}" value="${esc(n)}" placeholder="New pillar" style="flex:1"><input type="color" name="pc${i}" value="${c}" style="width:56px;padding:2px"></div>`).join('')}
   <p style="font-size:12px;color:var(--mute)">Renaming a pillar also updates this client\u2019s existing posts.</p>
   <div class="g2"><div><label>Warn when one pillar is over (%)</label><input type="number" name="mix" value="${MIX}"></div><div><label>Repost gap (days)</label><input type="number" name="gap" value="${GAP}"></div></div>
@@ -1170,7 +1189,7 @@ function settingsForm(){
     for(const [o,n] of pl.map(([o],i)=>[o,(f['pn'+i]||'').trim()]).filter(([o,n])=>o&&n&&o!==n)){
       const w=await sb.from('posts').update({pillar:n}).eq('client_id',cid).eq('pillar',o);
       if(w.error) return $('#se').textContent='Could not rename "'+o+'": '+w.error.message;}
-    const accounts=(f.accts||'').split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(x=>x[0]&&x[1]).map(x=>({platform:PLATFORMS.find(q=>q.toLowerCase()===x[0].toLowerCase())||x[0],name:x[1]}));
+    const accounts=accRows.map((_,k)=>({platform:f['ap'+k],name:(f['an'+k]||'').trim(),color:HEX.test(f['ac'+k]||'')?f['ac'+k]:'',goal:+f['ag'+k]||0})).filter(x=>x.name);
     const row={client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75,tz:f.tz,approval_stages:f.stages==='on',brand_color:f.usebrand?f.brand:null,logo_url:/^https:\/\//i.test((f.logo||'').trim())?f.logo.trim():null};
     if(accounts.length||ACCOUNTS.length)row.accounts=accounts;
     const r=await sb.from('client_settings').upsert(row);
