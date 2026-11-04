@@ -172,7 +172,7 @@ const INVITED=/type=invite/.test(location.hash);
 const sb=supabase.createClient(SB_URL,SB_KEY);
 // Clients read from this source. After running rls-hardening.sql, change to 'client_posts' to hide notes/results at the database level.
 const CLIENT_SRC='client_posts';
-const CLIENT_COLS='id,client_id,post_date,post_time,platform,pillar,format,status,approval,caption,visual,hashtags,campaign,due_date';
+const CLIENT_COLS='id,client_id,post_date,post_time,platform,pillar,format,status,approval,caption,visual,hashtags,campaign,due_date,account';
 sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY')setTimeout(async()=>{await boot();pwForm();},0);});
 let PILLARS={'Educational':'#7c5cd6','Promo':'#c2410c','Behind the Scenes':'#0f766e','Testimonials':'#b8326f','Community':'#2f6bc4','Trending':'#9a6700','Spotlight':'#2f7d3f'};
 const PLATFORMS=['Google Business Profile','Facebook','Instagram','TikTok','LinkedIn'];
@@ -195,6 +195,7 @@ function toast(msg,undo){let t=$('#toast');if(!t){t=document.createElement('div'
 const _alert=window.alert.bind(window);
 window.alert=m=>{const d=document.getElementById('dlg');d&&d.open?_alert(m):toast(String(m));};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const acctLabel=p=>p&&p.account?' \u00b7 '+esc(p.account):'';
 const tzAb=()=>{try{return new Intl.DateTimeFormat('en',{timeZone:TZ,timeZoneName:'short'}).formatToParts(new Date()).find(x=>x.type==='timeZoneName').value;}catch(e){return '';}};
 const t12=t=>{if(!t)return '';const [h,m]=t.slice(0,5).split(':').map(Number);return ((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h<12?'AM':'PM')+' '+tzAb();};
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -251,6 +252,7 @@ async function loadPosts(){
   const ord=Object.keys(DEF_P);
   PILLARS={};Object.keys(rawP).sort((x,y)=>{const i=ord.indexOf(x),j=ord.indexOf(y);return (i<0?99:i)-(j<0?99:j)||x.localeCompare(y);}).forEach(k=>PILLARS[k]=safeCol(rawP[k]));
   GOALS=s.goals&&Object.keys(s.goals).length?s.goals:{...DEF_G};
+  ACCOUNTS=Array.isArray(s.accounts)?s.accounts.filter(a=>a&&a.platform&&a.name):[];
   // Posts saved under a pillar name that is not in Settings (e.g. after a rename) get a steady colour instead of grey.
   const hsl=(h,sa,l)=>{l/=100;const a=sa*Math.min(l,1-l)/100,f=n=>{const k=(n+h/30)%12,c=l-a*Math.max(Math.min(k-3,9-k,1),-1);return Math.round(255*c).toString(16).padStart(2,'0');};return '#'+f(0)+f(8)+f(4);};
   posts.forEach(p=>{const n=(p.pillar||'').trim();if(n&&!PILLARS[n]){let h=0;for(const ch of n)h=(h*31+ch.charCodeAt(0))%360;PILLARS[n]=hsl(h,60,33);}});
@@ -271,7 +273,7 @@ function bindOut(){
 
 /* ---------- Admin ---------- */
 let vw='month',wkStart=null,hsets=[],yr=new Date().getFullYear();
-let newCm=[],BRAND=null,LOGO='',TZ='America/Denver',CNAME='';
+let ACCOUNTS=[],newCm=[],BRAND=null,LOGO='',TZ='America/Denver',CNAME='';
 const vis=v=>{v=String(v||'').trim();if(!/^https?:\/\//i.test(v))return esc(v);
   const m=v.match(/\/d\/([\w-]{10,})/)||v.match(/[?&]id=([\w-]{10,})/);
   const th=/drive\.google\.com/i.test(v)&&m?`<img src="https://drive.google.com/thumbnail?id=${m[1]}&sz=w600" alt="" loading="lazy" onerror="this.remove()" style="display:block;max-width:100%;max-height:260px;border-radius:8px;margin:6px 0">`:'';
@@ -300,7 +302,7 @@ function flash(v){if(v!=='Approved')return;let f=document.getElementById('flash'
 let selDay=null;
 document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('img.pimg');if(!im||$('#dlg').open)return;const o=document.createElement('div');o.id='lbx';o.innerHTML='<img alt="Post visual enlarged">';o.firstChild.src=im.src.replace('sz=w1000','sz=w2000');const x=()=>{o.remove();document.removeEventListener('keydown',k);};const k=ev=>{if(ev.key==='Escape')x();};o.onclick=x;document.addEventListener('keydown',k);document.body.appendChild(o);});
 const chipHtml=p=>{const pc=safeCol(PILLARS[p.pillar]),th=thumbUrl(p.visual,'w120');
-  return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
+  return `<button class="chip${dimmed(p)?' dim':''}" style="--pc:${pc}" data-id="${p.id}" title="${esc(p.platform)} · ${esc(p.pillar||'')}">${th?`<img class="th" src="${th}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="cl1">${picon(p.platform)}${p.post_time?`${esc(p.post_time.slice(0,5))} `:''}${esc(p.platform)}${acctLabel(p)}</span>${p.caption?`<span class="cl2">${esc(p.caption.slice(0,60))}</span>`:''}<span>${sbadge(p)}</span></button>`;};
 function videoEmbed(p){const v=String(p.visual||'').trim();if(!/^https?:\/\//i.test(v))return '';
   const fmt=p.format||'',asp=/^(Reel|Story)$/i.test(fmt)?'9/16':'16/9',box=i=>`<div class="vbox" style="aspect-ratio:${asp}">${i}</div>`;
   const open=`<div class="pb"><a class="lnk" href="${esc(v)}" target="_blank" rel="noopener noreferrer">Open the video ↗</a></div>`;let m;
@@ -310,7 +312,7 @@ function videoEmbed(p){const v=String(p.visual||'').trim();if(!/^https?:\/\//i.t
   if(/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(v))return `<video class="pvid" src="${esc(v)}" controls playsinline preload="metadata"></video>`+open;
   return '';}
 function postCard(p){
-  const nm=((me&&me.role!=='admin')?CNAME:(clients.find(c=>c.id===cid)||{}).name)||'Your brand';
+  const nm=p.account||((me&&me.role!=='admin')?CNAME:(clients.find(c=>c.id===cid)||{}).name)||'Your brand';
   const t=thumbUrl(p.visual,'w1000');
   const av=LOGO?`<img class="av" src="${esc(LOGO)}" alt="" onerror="this.remove()">`:`<span class="av">${esc(nm.trim().charAt(0).toUpperCase()||'?')}</span>`;
   const vd=videoEmbed(p);
@@ -356,7 +358,7 @@ function dayTap(ds){
   if(ps.length===1){lv=false;idx=posts.indexOf(ps[0]);clientView();scrollTo(0,0);return;}
   const d=$('#dlg');
   d.innerHTML=`<h3 style="margin:0 0 6px">${esc(new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}))}</h3>`
-   +ps.map(p=>`<button type="button" class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><b>${esc(p.platform)}</b> ${apBadge(p,1)}<div class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc((p.caption||'').slice(0,70))}</div></div></button>`).join('')
+   +ps.map(p=>`<button type="button" class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><b>${esc(p.platform)}${acctLabel(p)}</b> ${apBadge(p,1)}<div class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc((p.caption||'').slice(0,70))}</div></div></button>`).join('')
    +`<div class="row" style="margin-top:10px"><button type="button" id="dtx" style="margin-left:auto">Close</button></div>`;
   d.showModal();
   $('#dtx').onclick=()=>d.close();
@@ -366,14 +368,14 @@ function calView(m){
   const y=month.getFullYear(),mo=month.getMonth(),first=new Date(y,mo,1),start=new Date(y,mo,1-((first.getDay()+6)%7)),todayS=iso(new Date());
   let cells='';
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);if(i>=35&&d.getMonth()!==mo)break;const ds=iso(d);
-    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}" data-ds="${ds}"><span>${d.getDate()}</span><div class="dots">${posts.filter(p=>p.post_date===ds).map(p=>`<i class="dt dt-${p.approval==='Changes requested'?'Changes':p.approval}"></i>`).join('')}</div>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc ap-${p.approval==='Approved'?'ok':p.approval==='Pending'?'pn':'ch'}" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1">${picon(p.platform)}<span class="ctx">${esc(p.platform)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
+    cells+=`<div class="day${d.getMonth()!==mo?' off':''}${ds===todayS?' today':''}" data-ds="${ds}"><span>${d.getDate()}</span><div class="dots">${posts.filter(p=>p.post_date===ds).map(p=>`<i class="dt dt-${p.approval==='Changes requested'?'Changes':p.approval}"></i>`).join('')}</div>${posts.filter(p=>p.post_date===ds).map(p=>`<button class="chip cc ap-${p.approval==='Approved'?'ok':p.approval==='Pending'?'pn':'ch'}" style="--pc:${safeCol(PILLARS[p.pillar])}" data-i="${posts.indexOf(p)}" title="${esc(p.platform)}"><span class="cl1">${picon(p.platform)}<span class="ctx">${esc(p.platform)}${acctLabel(p)}</span></span>${apBadge(p,1)}</button>`).join('')}</div>`;}
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="fvb3">Feed</button></div>
   <div class="row"><button id="pm" aria-label="Previous month">‹</button><h2 style="margin:0;flex:1;text-align:center">${month.toLocaleString('en',{month:'long',year:'numeric'})}</h2><button id="nm" aria-label="Next month">›</button></div>
   <div class="cgrid" style="margin-top:10px">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend">${Object.entries(PILLARS).map(([k,c])=>`<span><i style="background:${c}"></i>${esc(k)}</span>`).join('')}</div><div id="dayl"></div>`;
   $('#one').onclick=()=>{lv=false;clientView();};$('#lst').onclick=()=>{lv=true;clientView();};$('#fvb3').onclick=()=>{lv='feed';clientView();};
   const showDay=ds=>{selDay=ds;const ps=posts.filter(p=>p.post_date===ds);document.querySelectorAll('.cgrid .day').forEach(c=>c.classList.toggle('sel',c.dataset.ds===ds));
-    $('#dayl').innerHTML=`<h3 style="margin:14px 0 6px">${new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'})}</h3>`+(ps.map(p=>`<button class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><b>${esc(p.platform)}</b> ${apBadge(p,1)}<div class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc((p.caption||'').slice(0,90))}</div></div></button>`).join('')||'<p style="color:var(--mute)">Nothing planned this day.</p>');
+    $('#dayl').innerHTML=`<h3 style="margin:14px 0 6px">${new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'})}</h3>`+(ps.map(p=>`<button class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><b>${esc(p.platform)}${acctLabel(p)}</b> ${apBadge(p,1)}<div class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' · ':''}${esc((p.caption||'').slice(0,90))}</div></div></button>`).join('')||'<p style="color:var(--mute)">Nothing planned this day.</p>');
     document.querySelectorAll('#dayl .wp').forEach(b=>b.onclick=()=>{lv=false;idx=+b.dataset.i;clientView();});};
   document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>c.onclick=e=>{if(e.target.closest('.cc'))return;showDay(c.dataset.ds);if(matchMedia('(max-width:640px)').matches)dayTap(c.dataset.ds);});
   showDay(selDay||todayS);
@@ -396,7 +398,7 @@ function tableView(){
     const rows=posts.filter(p=>(!ls.pf||p.platform===ls.pf)&&(!ls.pi||p.pillar===ls.pi)&&(!ls.st||p.status===ls.st)&&(!ls.ap||p.approval===ls.ap)&&(!q||((p.caption||'')+' '+(p.hashtags||'')).toLowerCase().includes(q)))
       .sort((a,b)=>String(a[ls.k]||'~').localeCompare(String(b[ls.k]||'~'))*ls.d||String(a.post_date).localeCompare(String(b.post_date)));
     $('#lc').textContent=rows.length+' of '+posts.length+' posts';curRows=rows;
-    $('#lb').innerHTML=rows.map(p=>`<tr class="r" data-id="${p.id}" tabindex="0"><td><input type="checkbox" class="rk" data-id="${p.id}"${selIds.has(p.id)?' checked':''} aria-label="Select this post" style="width:auto;min-height:0"></td><td>${esc(p.post_date||'')}</td><td>${esc((p.post_time||'').slice(0,5))}</td><td>${picon(p.platform)}${esc(p.platform)}</td><td><span class="pd" style="background:${safeCol(PILLARS[p.pillar])}"></span>${esc(p.pillar||'')}</td><td>${esc(p.format||'')}</td><td>${sbadge({...p,approval:null,caption:'x'})}</td><td>${apBadge(p)}</td><td>${p.caption?esc(p.caption.slice(0,90)):'<span class="sb b-Changes">No caption</span>'}</td></tr>`).join('')||'<tr><td colspan="9" style="color:var(--mute);padding:16px">No posts match these filters.</td></tr>';
+    $('#lb').innerHTML=rows.map(p=>`<tr class="r" data-id="${p.id}" tabindex="0"><td><input type="checkbox" class="rk" data-id="${p.id}"${selIds.has(p.id)?' checked':''} aria-label="Select this post" style="width:auto;min-height:0"></td><td>${esc(p.post_date||'')}</td><td>${esc((p.post_time||'').slice(0,5))}</td><td>${picon(p.platform)}${esc(p.platform)}${acctLabel(p)}</td><td><span class="pd" style="background:${safeCol(PILLARS[p.pillar])}"></span>${esc(p.pillar||'')}</td><td>${esc(p.format||'')}</td><td>${sbadge({...p,approval:null,caption:'x'})}</td><td>${apBadge(p)}</td><td>${p.caption?esc(p.caption.slice(0,90)):'<span class="sb b-Changes">No caption</span>'}</td></tr>`).join('')||'<tr><td colspan="9" style="color:var(--mute);padding:16px">No posts match these filters.</td></tr>';
     document.querySelectorAll('tr.r').forEach(r=>{const o=()=>postForm(posts.find(p=>p.id===r.dataset.id));r.onclick=o;r.onkeydown=e=>{if(e.key==='Enter'&&e.target===r)o();};});
     document.querySelectorAll('.rk').forEach(c=>{c.onclick=e=>{e.stopPropagation();if(c.checked)selIds.add(c.dataset.id);else selIds.delete(c.dataset.id);upBar();};});
     upBar();};
@@ -446,7 +448,7 @@ function insightsView(){
   $('#app').innerHTML=miniHead()+`<main>${viewbar('insights')}<div class="row" style="margin-bottom:6px"><h2 style="margin:0;flex:1">Insights${cname?' · '+esc(cname):''}</h2><select id="insr" style="width:auto" aria-label="Period"><option value="all"${insRange==='all'?' selected':''}>All time</option><option value="30"${insRange==='30'?' selected':''}>Last 30 days</option><option value="90"${insRange==='90'?' selected':''}>Last 90 days</option></select></div>
   ${rs.length?`<p style="color:var(--mute);margin:0 0 6px">Based on ${rs.length} post${rs.length===1?'':'s'} with results.</p>
   <div class="stats">${ib(sum('reach').toLocaleString(),'Total reach')}${ib(avg(rs,'reach').toLocaleString(),'Average reach per post')}${ib(sum('likes').toLocaleString(),'Likes / reactions')}${ib(sum('comments_count').toLocaleString(),'Comments')}${ib(sum('shares_saves').toLocaleString(),'Shares / saves')}${ib(rate+'%','Engagements per reach')}</div>
-  <h3>Top posts by reach</h3>${top.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><div><b>${esc(p.platform)}</b> <span class="meta">${esc(p.post_date||'')} · ${esc(p.pillar||'')}</span></div><div>${esc((p.caption||'').slice(0,90))||'<span class="meta">(no caption)</span>'}</div></div><div style="text-align:right"><b>${(p.reach||0).toLocaleString()}</b><div class="meta">reach</div></div></button>`).join('')}
+  <h3>Top posts by reach</h3>${top.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1"><div><b>${esc(p.platform)}${acctLabel(p)}</b> <span class="meta">${esc(p.post_date||'')} · ${esc(p.pillar||'')}</span></div><div>${esc((p.caption||'').slice(0,90))||'<span class="meta">(no caption)</span>'}</div></div><div style="text-align:right"><b>${(p.reach||0).toLocaleString()}</b><div class="meta">reach</div></div></button>`).join('')}
   <h3>By content pillar</h3>${tbl(grp(p=>p.pillar),'Pillar',k=>PILLARS[k])}
   <h3>By platform</h3>${tbl(grp(p=>p.platform),'Platform',k=>PCOL[k])}
   <h3>By weekday</h3>${tbl(byDow,'Day')}
@@ -543,7 +545,7 @@ function adminView(){
   ${progress(mp,'client')}${mp.length?'':'<div class="empty">No posts planned for this month yet. <button class="p np2" type="button">Add the first post</button></div>'}
   <div class="grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="legend noprint" role="group" aria-label="Filter the calendar">${Object.entries(PILLARS).map(([k,c])=>`<button type="button" class="lg${fPil===k?' on':''}" data-pil="${esc(k)}"><i style="background:${c}"></i>${esc(k)}</button>`).join('')}<span>|</span>${PLATFORMS.map(k=>`<button type="button" class="lg${fPlat===k?' on':''}" data-plat="${esc(k)}">${picon(k)}${esc(k)}</button>`).join('')}<span class="sb b-Approved">Client OK</span><span class="sb b-Changes">Changes / no caption</span></div>
-  <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${esc(p.platform)}</b> ${sbadge(p)} <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
+  <div class="agenda">${mp.slice().sort((a,b)=>(a.post_date+(a.post_time||'')).localeCompare(b.post_date+(b.post_time||''))).map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><b>${esc(p.platform)}${acctLabel(p)}</b> ${sbadge(p)} <span class="meta">${esc(p.post_date)}${p.post_time?' '+esc(p.post_time.slice(0,5)):''} · ${esc(p.pillar)}${p.approval==='Approved'?' · ✓':''}</span><div>${esc((p.caption||'').slice(0,100))||'<span class="meta">(!) No caption</span>'}</div></div></button>`).join('')||'<p class="meta">No posts this month.</p>'}</div>
   <p class="noprint" style="color:var(--mute);font-size:13px;margin:0">Tip: drag a post onto another day to reschedule it.</p>
   <h3>This week against goals</h3><div class="pace">${PLATFORMS.map(pl=>{const n=wk.filter(p=>p.platform===pl).length;return `<div class="stat"><b>${n} / ${GOALS[pl]??0}</b>${pl}</div>`}).join('')}</div>${rdy}${chk}</main>`;
   bindOut();
@@ -577,7 +579,7 @@ function weekView(){
     const ps=posts.filter(p=>p.post_date===ds).sort((a,b)=>(a.post_time||'99').localeCompare(b.post_time||'99'));
     const kds=keyDates.filter(k=>k.key_date===ds).map(k=>`<div style="color:var(--acc);font-size:13px">★ ${esc(k.label)}</div>`).join('');
     return `<div class="wd${ds===todayS?' today':''}"><h3>${d.toLocaleDateString('en',{weekday:'long',day:'numeric',month:'long'})}</h3>${kds}
-    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${esc(p.platform)}</b> ${sbadge(p)} <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' (Manila '+esc(toManila(p.post_date,p.post_time,TZ))+') · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
+    ${ps.map(p=>`<button class="wp" data-id="${p.id}"><i style="background:${PILLARS[p.pillar]||'#6b6f85'}"></i><div style="flex:1"><div><b>${esc(p.platform)}${acctLabel(p)}</b> ${sbadge(p)} <span class="meta">${p.post_time?esc(p.post_time.slice(0,5))+' (Manila '+esc(toManila(p.post_date,p.post_time,TZ))+') · ':''}${esc(p.format)} · ${esc(p.pillar)} · ${esc(p.status)}${p.approval==='Approved'?' · ✓ client approved':p.approval==='Changes requested'?' · changes requested':' · awaiting approval'}</span></div>
     <div style="margin-top:3px">${p.caption?esc(p.caption).slice(0,300):'<span class="meta">(!) No caption yet</span>'}</div>${p.hashtags?`<div class="meta">${esc(p.hashtags)}</div>`:''}</div></button>`).join('')||'<div style="color:var(--mute);font-size:13px">Nothing planned.</div>'}</div>`;
   }).join('');
   const wk=posts.filter(p=>p.post_date>=iso(days[0])&&p.post_date<=iso(days[6]));
@@ -1042,7 +1044,7 @@ function exportIcs(){
   document.body.appendChild(a);a.click();a.remove();}
 function exportCsv(){
   if(!posts.length) return alert('No posts to export.');
-  const cols=['post_date','post_time','platform','pillar','format','status','approval','campaign','caption','visual','hashtags','notes','reach','likes','comments_count','shares_saves','dms_inquiries','link_clicks','engagements'];
+  const cols=['post_date','post_time','platform','account','pillar','format','status','approval','campaign','caption','visual','hashtags','notes','reach','likes','comments_count','shares_saves','dms_inquiries','link_clicks','engagements'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const csv='\ufeff'+cols.join(',')+'\r\n'+posts.map(p=>cols.map(c=>q(p[c])).join(',')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -1072,10 +1074,11 @@ const opts=(arr,v)=>arr.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option
 async function postForm(p={}){
   if(!cid) return alert('Add a client first.');
   const d=$('#dlg');
-  d.innerHTML=`<form id="pf" autocomplete="off"><h2 style="margin-top:0">${p.id?'Edit post':'New post'}</h2>${p.id&&checks(p).length?`<div class="warn">To check: ${esc(checks(p).join(', '))}</div>`:''}
+  d.innerHTML=`<form id="pf" autocomplete="off"><h2 style="margin-top:0">${p.id?'Edit post':'New post'}</h2>${p.id&&p._saved?'<div style="padding:8px 10px;border-radius:8px;background:rgba(47,125,63,.2);margin-bottom:8px">\u2713 Post saved. Add your photos or videos below, then click Save post again when you are done.</div>':''}${p.id&&checks(p).length?`<div class="warn">To check: ${esc(checks(p).join(', '))}</div>`:''}
   <div class="g2"><div><label>Date</label><input name="post_date" type="date" required value="${p.post_date||''}"></div>
   <div><label>Time (client's local time)</label><input name="post_time" type="time" value="${(p.post_time||'').slice(0,5)}"><div id="mn" style="font-size:12px;color:var(--mute)"></div></div>
   <div><label>Platform</label><select name="platform">${opts(PLATFORMS,p.platform)}</select></div>
+  <div><label>Account / page</label><select name="account" id="acs"></select><div style="font-size:12px;color:var(--mute)">${ACCOUNTS.length?'':'Add your accounts in Settings.'}</div></div>
   <div><label>Content pillar</label><select name="pillar"><option value=""${p.id&&!p.pillar?' selected':''}>(none)</option>${opts(Object.keys(PILLARS),p.pillar||(p.id?null:Object.keys(PILLARS)[0]))}</select></div>
   <div><label>Format</label><select name="format">${opts(FORMATS,p.format)}</select></div>
   <div><label>Status</label><select name="status">${(()=>{const L=stList();return opts(p.status&&!L.includes(p.status)?[...L,p.status]:L,p.status||'Draft');})()}</select></div>
@@ -1091,7 +1094,7 @@ async function postForm(p={}){
   <div id="resw" style="display:${p.status==='Posted'?'block':'none'}"><h3 style="margin:16px 0 0;font-size:15px">Results (fill in after the post is live)</h3>
   <div class="g2">${M.map(([k,l])=>`<div><label>${l}</label><input type="number" min="0" name="${k}" value="${p[k]??''}"></div>`).join('')}</div></div>
   <label>Notes</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
-  <div id="upx"></div>
+  <div id="upx">${p.id?'':'<div style="margin:10px 0;padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--mute);font-size:13px">\ud83d\udcf7 Photos &amp; videos: click <b>Save post</b> first. This window then stays open with an <b>Add photo or video</b> button.</div>'}</div>
   <div id="cmx"></div>
   ${p.id?'<details id="vsn" style="margin-top:10px"><summary>Caption versions</summary><div id="vsb"></div></details>':''}
   ${p.id?'<details id="hst" style="margin-top:10px"><summary>History</summary><div id="hsb"></div></details>':''}
@@ -1099,9 +1102,13 @@ async function postForm(p={}){
   <div class="row"><button class="p">Save post</button><button type="button" id="cx">Cancel</button>${p.id?'<button type="button" id="rp">Repost this</button><button type="button" id="dup">Duplicate</button>':''}${p.id?'<button type="button" class="bad" id="del" style="margin-left:auto">Delete</button>':''}</div></form>`;
   d.showModal();
   $('#cx').onclick=()=>d.close();
+  const acOpts=(pl,cur)=>{const l=ACCOUNTS.filter(a=>a.platform===pl).map(a=>a.name);if(cur&&!l.includes(cur))l.push(cur);return {l,html:'<option value="">'+(l.length?'(choose account)':'(none set for this platform)')+'</option>'+l.map(n=>`<option${n===cur?' selected':''}>${esc(n)}</option>`).join('')};};
+  const fillAc=cur=>{const o=acOpts($('#pf').platform.value,cur);$('#acs').innerHTML=o.html;$('#acs').required=o.l.length>0;};
+  fillAc(p.account||'');
+  $('#pf').platform.addEventListener('change',()=>{fillAc('');updPv();});
   $('#pf').status.onchange=e=>{$('#resw').style.display=e.target.value==='Posted'?'block':'none';};
-  const updPv=()=>{const f=$('#pf');$('#pvw').innerHTML=postCard({...p,platform:f.platform.value,format:f.format.value,caption:f.caption.value,visual:f.visual.value,hashtags:f.hashtags.value,post_date:f.post_date.value});};
-  ['platform','format','caption','visual','hashtags','post_date'].forEach(n=>$('#pf')[n].addEventListener('input',updPv));updPv();
+  const updPv=()=>{const f=$('#pf');$('#pvw').innerHTML=postCard({...p,platform:f.platform.value,account:f.account.value,format:f.format.value,caption:f.caption.value,visual:f.visual.value,hashtags:f.hashtags.value,post_date:f.post_date.value});};
+  ['platform','account','format','caption','visual','hashtags','post_date'].forEach(n=>$('#pf')[n].addEventListener('input',updPv));updPv();
   const updRp=()=>{const f=$('#pf');const dt=f.post_date.value;$('#rpd').textContent=f.repost.checked&&dt?'Can be reposted from '+addDays(dt,GAP)+' ('+GAP+' days after this date).':'';};
   const updV=()=>{const v=$('#pf').visual.value;$('#vl').innerHTML=/^https?:\/\//i.test(v.trim())?vis(v):'';};
   $('#pf').visual.oninput=updV;updV();
@@ -1119,10 +1126,12 @@ async function postForm(p={}){
     f.post_time=f.post_time||null;f.due_date=f.due_date||null;f.client_id=cid;
     M.forEach(([k])=>{f[k]=(f[k]===''||f[k]==null)?null:+f[k];});
     f.repost=f.repost==='on';
+    if(!ACCOUNTS.length&&!p.account)delete f.account;else f.account=f.account||null;
     if(f.approval!==p.approval&&f.approval==='Pending'){f.approved_by=null;f.approved_on=null;}
-    const r=p.id?await sb.from('posts').update(f).eq('id',p.id):await sb.from('posts').insert(f);
+    const r=p.id?await sb.from('posts').update(f).eq('id',p.id):await sb.from('posts').insert(f).select().single();
     if(r.error) return $('#pe').textContent='Could not save: '+r.error.message;
-    d.close();await loadPosts();adminView();};
+    d.close();await loadPosts();adminView();
+    if(!p.id&&r.data){const np=posts.find(x=>x.id===r.data.id)||r.data;postForm({...np,_saved:true});}};
   if(p.id) $('#del').onclick=async()=>{if(!confirm('Delete this post?'))return;await sb.from('posts').delete().eq('id',p.id);d.close();await loadPosts();adminView();};
 }
 function settingsForm(){
@@ -1130,6 +1139,9 @@ function settingsForm(){
   const d=$('#dlg'),pl=[...Object.entries(PILLARS),['','#6b6f85']];
   d.innerHTML=`<form id="sf"><h2 style="margin-top:0">Settings for ${esc(clients.find(c=>c.id===cid)?.name)}</h2>
   <h3>Weekly post goals</h3><div class="g2">${PLATFORMS.map(p=>`<div><label>${p}</label><input type="number" min="0" name="g:${p}" value="${GOALS[p]??0}"></div>`).join('')}</div>
+  <h3>Accounts / pages</h3>
+  <textarea name="accts" rows="4" placeholder="Facebook | Ship Utah&#10;Facebook | DHL&#10;Instagram | DHL">${esc(ACCOUNTS.map(a=>a.platform+' | '+a.name).join('\n'))}</textarea>
+  <p style="font-size:12px;color:var(--mute);margin:2px 0 0">One per line: Platform | Account name. These appear in the Account box when you make a post.</p>
   <h3>Content pillars</h3>${pl.map(([n,c],i)=>`<div class="row" style="margin-top:6px"><input name="pn${i}" value="${esc(n)}" placeholder="New pillar" style="flex:1"><input type="color" name="pc${i}" value="${c}" style="width:56px;padding:2px"></div>`).join('')}
   <p style="font-size:12px;color:var(--mute)">Renaming a pillar also updates this client\u2019s existing posts.</p>
   <div class="g2"><div><label>Warn when one pillar is over (%)</label><input type="number" name="mix" value="${MIX}"></div><div><label>Repost gap (days)</label><input type="number" name="gap" value="${GAP}"></div></div>
@@ -1158,7 +1170,10 @@ function settingsForm(){
     for(const [o,n] of pl.map(([o],i)=>[o,(f['pn'+i]||'').trim()]).filter(([o,n])=>o&&n&&o!==n)){
       const w=await sb.from('posts').update({pillar:n}).eq('client_id',cid).eq('pillar',o);
       if(w.error) return $('#se').textContent='Could not rename "'+o+'": '+w.error.message;}
-    const r=await sb.from('client_settings').upsert({client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75,tz:f.tz,approval_stages:f.stages==='on',brand_color:f.usebrand?f.brand:null,logo_url:/^https:\/\//i.test((f.logo||'').trim())?f.logo.trim():null});
+    const accounts=(f.accts||'').split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(x=>x[0]&&x[1]).map(x=>({platform:PLATFORMS.find(q=>q.toLowerCase()===x[0].toLowerCase())||x[0],name:x[1]}));
+    const row={client_id:cid,goals,pillars,mix_threshold:+f.mix||40,repost_gap:+f.gap||75,tz:f.tz,approval_stages:f.stages==='on',brand_color:f.usebrand?f.brand:null,logo_url:/^https:\/\//i.test((f.logo||'').trim())?f.logo.trim():null};
+    if(accounts.length||ACCOUNTS.length)row.accounts=accounts;
+    const r=await sb.from('client_settings').upsert(row);
     if(r.error) return $('#se').textContent='Could not save: '+r.error.message;
     d.close();await loadPosts();adminView();};
   d.showModal();
@@ -1393,7 +1408,7 @@ function weekView(m){
   const byDT=(a,b)=>((a.post_date||'9999')+(a.post_time||'')).localeCompare((b.post_date||'9999')+(b.post_time||''));
   const live=posts.filter(p=>p.post_date&&p.post_date>=td&&p.post_date<=end&&p.status!=='Posted').sort(byDT);
   const pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').sort((a,b)=>(a.due_date||a.post_date||'9999').localeCompare(b.due_date||b.post_date||'9999')||byDT(a,b));
-  const row=p=>`<button type="button" class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1;min-width:0"><div><b>${esc(p.platform)}</b> ${apBadge(p,1)}${window.ccTag?window.ccTag(p):''}</div><div class="meta">${p.post_date?esc(fmt(p.post_date)):'No date'}${p.post_time?' \u00b7 '+esc(t12(p.post_time)):''}</div>${dueChip(p)?`<div style="margin:4px 0">${dueChip(p)}</div>`:''}<div class="meta clamp2">${esc(p.caption||'No caption yet.')}</div></div></button>`;
+  const row=p=>`<button type="button" class="wp" data-i="${posts.indexOf(p)}"><i style="background:${safeCol(PILLARS[p.pillar])}"></i><div style="flex:1;min-width:0"><div><b>${esc(p.platform)}${acctLabel(p)}</b> ${apBadge(p,1)}${window.ccTag?window.ccTag(p):''}</div><div class="meta">${p.post_date?esc(fmt(p.post_date)):'No date'}${p.post_time?' \u00b7 '+esc(t12(p.post_time)):''}</div>${dueChip(p)?`<div style="margin:4px 0">${dueChip(p)}</div>`:''}<div class="meta clamp2">${esc(p.caption||'No caption yet.')}</div></div></button>`;
   const days=[...Array(7)].map((_,i)=>addDays(td,i));
   const liveHtml=days.map(ds=>{const ps=live.filter(p=>p.post_date===ds);return ps.length?`<div class="wd${ds===td?' today':''}"><h3>${ds===td?'Today \u00b7 ':''}${esc(fmt(ds))}</h3>${ps.map(row).join('')}</div>`:'';}).join('');
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="cvb3">Calendar</button><button id="fvb3">Feed</button></div>
@@ -3181,7 +3196,7 @@ async function activity(){const d=Q('#dlg');d.innerHTML='<h2>Recent activity</h2
 
 /* 5. Approve all remaining (client) */
 function approveAll(){const pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted'),d=Q('#dlg');
-  d.innerHTML=`<h2>Approve all ${pend.length} remaining?</h2><p style="color:var(--mute)">Only do this if you have looked at them.</p>`+pend.map(p=>`<div class="cm"><b>${esc(p.platform)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,80))}</small></div>`).join('')+'<div class="row" style="margin-top:12px"><button class="ok" type="button" id="bxy">Approve all</button><button type="button" id="bxn">Cancel</button></div>';d.showModal();
+  d.innerHTML=`<h2>Approve all ${pend.length} remaining?</h2><p style="color:var(--mute)">Only do this if you have looked at them.</p>`+pend.map(p=>`<div class="cm"><b>${esc(p.platform)}${acctLabel(p)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,80))}</small></div>`).join('')+'<div class="row" style="margin-top:12px"><button class="ok" type="button" id="bxy">Approve all</button><button type="button" id="bxn">Cancel</button></div>';d.showModal();
   Q('#bxn').onclick=()=>d.close();
   Q('#bxy').onclick=async()=>{Q('#bxy').disabled=true;let bad=0;for(const p of pend){const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:'Approved'});if(r.error)bad++;}
     d.close();await loadPosts();clientView();toast(bad?('Approved '+(pend.length-bad)+', '+bad+' could not be saved'):'All approved. It will go live as scheduled.');};}
@@ -3278,7 +3293,7 @@ async function ready(){dlg('<h2 style="margin-top:0">Ready to post today</h2><p>
 function search(){const d=dlg('<h2 style="margin-top:0">Search posts</h2><input id="bxsi" placeholder="Caption, campaign, hashtag or platform" autocomplete="off"><div id="bxsr" style="margin-top:8px"></div>');
   const go=()=>{const q=Q('#bxsi').value.trim().toLowerCase(),r=Q('#bxsr');if(q.length<2){r.innerHTML='';return;}
     const hit=posts.filter(p=>[p.caption,p.campaign,p.hashtags,p.platform,p.pillar].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,30);
-    r.innerHTML=hit.map((p,i)=>`<button type="button" class="wp" data-h="${i}" style="display:block;width:100%;text-align:left;margin:4px 0"><b>${esc(p.platform)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,90))}</small></button>`).join('')||'<p style="color:var(--mute)">No matches.</p>';
+    r.innerHTML=hit.map((p,i)=>`<button type="button" class="wp" data-h="${i}" style="display:block;width:100%;text-align:left;margin:4px 0"><b>${esc(p.platform)}${acctLabel(p)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,90))}</small></button>`).join('')||'<p style="color:var(--mute)">No matches.</p>';
     r.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{const p=hit[+b.dataset.h];d.close();if(isA())postForm(p);else{lv=false;idx=posts.indexOf(p);clientView();scrollTo(0,0);}});};
   Q('#bxsi').oninput=go;Q('#bxsi').focus();}
 
