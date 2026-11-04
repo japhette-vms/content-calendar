@@ -1249,7 +1249,7 @@ async function ideaBank(m){
   const r=await sb.from('ideas').select('*').eq('source','client').order('created_at',{ascending:false});
   const list=(r.data||[]).slice().sort(ideaSort),ids=list.map(i=>i.id),med={};
   if(ids.length){const mr=await sb.from('post_media').select('idea_id,status,file_name,mime_type,drive_file_id,drive_link').in('idea_id',ids).order('created_at');(mr.data||[]).forEach(x=>(med[x.idea_id]=med[x.idea_id]||[]).push(x));}
-  const lbl={Idea:'With your social media manager',Planned:'Planned \u2713',Used:'Used in a post'};
+  const lbl={Idea:'Received \u2713 With your social media manager',Planned:'Planned \u2713 We are working on it',Used:'Added to your calendar'};
   m.innerHTML=`<div class="row" style="margin-bottom:10px"><button id="one">One at a time</button><button id="lst">List</button><button id="cvb3">Calendar</button><button id="fvb3">Feed</button></div>
   <div class="card"><h2 style="margin-top:0">\ud83d\udca1 Idea bank</h2><p style="color:var(--mute);margin-top:0">Got a photo, an offer, an event or a story you would like to see on your page? Drop it here and your social media manager will see it.</p>
   <textarea id="ibn" rows="3" placeholder="What is the idea? For example: new window display, share it on Friday">${esc(ideaDraft.note)}</textarea>
@@ -3120,15 +3120,9 @@ addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#ap,#axf'))v
 'use strict';
 const orig=window.dayTap;
 function ask(ds){
-  const d=document.getElementById('dlg'),nice=new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'});
-  d.innerHTML=`<h2 style="margin-top:0">Request a post</h2><p style="color:var(--mute);margin:0 0 6px">For ${esc(nice)}</p><label for="rqk">What is it?</label><select id="rqk">${['Event','Promotion','Photo','Question','Other'].map(k=>`<option>${k}</option>`).join('')}</select><label for="rqn">Tell us the idea</label><textarea id="rqn" rows="4" placeholder="For example: sale this day, please post a reminder"></textarea><p class="err" id="rqe"></p><div class="row" style="margin-top:12px"><button class="p" type="button" id="rqs">Send to my social media manager</button><button type="button" id="rqx">Cancel</button></div>`;
-  if(!d.open)d.showModal();document.getElementById('rqx').onclick=()=>d.close();
-  document.getElementById('rqs').onclick=async()=>{const note=document.getElementById('rqn').value.trim(),k=document.getElementById('rqk').value;
-    if(!note)return document.getElementById('rqe').textContent='Please describe the idea first.';
-    const tag=ideaTag(k==='Other'?'':k,ds);
-    const r=await sb.from('ideas').insert({client_id:cid,source:'client',author_id:user.id,notes:tag+'\n'+note,title:note.split('\n')[0].slice(0,60)});
-    if(r.error)return document.getElementById('rqe').textContent='Could not send: '+r.error.message;
-    d.close();toast('Sent! You can see it under 💡 Ideas.');};
+  const d=document.getElementById('dlg');if(d&&d.open)d.close();
+  ideaDraft.by=ds;lv='ideas';clientView();scrollTo(0,0);
+  toast('Add your idea for '+new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}));
 }
 window.dayTap=function(ds){
   if(!me||me.role==='admin')return orig(ds);
@@ -3136,14 +3130,86 @@ window.dayTap=function(ds){
   if(!has){if(ds<iso(new Date()))return;return ask(ds);}
   orig(ds);
   const d=document.getElementById('dlg'),row=d.querySelector('#dtx');
-  if(d.open&&row&&ds>=iso(new Date())&&!d.querySelector('#rqa')){const b=document.createElement('button');b.type='button';b.id='rqa';b.textContent='+ Request another post';b.onclick=()=>ask(ds);row.parentNode.insertBefore(b,row);}
+  if(d.open&&row&&ds>=iso(new Date())&&!d.querySelector('#rqa')){const b=document.createElement('button');b.type='button';b.id='rqa';b.textContent='+ Add an idea for this day';b.onclick=()=>ask(ds);row.parentNode.insertBefore(b,row);}
 };
 function btn(){const l=document.getElementById('dayl');if(!l||!me||me.role==='admin'||!selDay||selDay<iso(new Date()))return;
   const h=l.querySelector('#rqd');if(h&&h.dataset.d===selDay)return;if(h)h.remove();
-  const b=document.createElement('button');b.id='rqd';b.type='button';b.className='p';b.dataset.d=selDay;b.style.marginTop='10px';b.textContent='+ Request a post for this day';b.onclick=()=>ask(selDay);l.appendChild(b);}
+  const b=document.createElement('button');b.id='rqd';b.type='button';b.className='p';b.dataset.d=selDay;b.style.marginTop='10px';b.textContent='+ Add an idea for this day';b.onclick=()=>ask(selDay);l.appendChild(b);}
 let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{btn();}catch(e){console.error(e);}});}).observe(document.getElementById('app'),{childList:true,subtree:true});
 })();
 </script>
 
+<style>html[data-ts="1"] body.client{font-size:18px}html[data-ts="1"] body.client .pc .pb{font-size:18px}html[data-ts="2"] body.client{font-size:21px}html[data-ts="2"] body.client .pc .pb{font-size:21px}.bxk{font-size:14px;margin-left:2px}#bxt2 .row b{min-width:0}</style>
+<script>
+/* Add-ons 6: idea to post with date, idea markers, Today panel, Activity, Approve all, text size, next-step notes, saved replies, print. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('addons6',e);
+const nm=id=>((clients.find(c=>c.id===id)||{}).name||'Client');
+const nice=d=>new Date(d+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
+const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v);}catch(e){}};
+const dd=d=>Math.round((new Date(d+'T00:00')-new Date(iso(new Date())+'T00:00'))/864e5);
+
+/* 7. what happens next */
+const t0=window.toast;window.toast=function(m,u){if(me&&me.role!=='admin'&&typeof m==='string'){if(/^Approved/.test(m)&&!/will go live/.test(m))m+=' It will go live as scheduled.';else if(/^Changes sent/.test(m))m+=' We\u2019ll update the post and let you know.';}return t0(m,u);};
+
+/* 1. Make post from idea keeps the "needed by" date */
+let want='';
+addEventListener('click',async e=>{const b=e.target.closest&&e.target.closest('[data-m]');if(!b||!isA())return;want='';
+  try{const r=await sb.from('ideas').select('notes').eq('id',b.dataset.m).maybeSingle();want=ideaMeta(r.data).by||'';fill();}catch(x){fail(x);}},true);
+function fill(){const i=Q('#dlg input[name="post_date"]');if(want&&i&&!i.value){i.value=want;want='';}}
+new MutationObserver(fill).observe(Q('#dlg'),{childList:true,subtree:true});
+
+/* 2. idea markers on client calendar */
+let ideas=[],iAt=0,iBusy=false;
+async function loadIdeas(){if(iBusy||Date.now()-iAt<6e4)return;iBusy=true;
+  try{const r=await sb.from('ideas').select('id,notes,status').eq('client_id',cid).eq('source','client').eq('status','Idea');ideas=(r.data||[]).map(i=>ideaMeta(i).by).filter(Boolean);iAt=Date.now();paintI();}catch(e){iAt=Date.now();}iBusy=false;}
+function paintI(){document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>{const has=ideas.includes(c.dataset.ds),m=c.querySelector('.bxk');
+  if(has&&!m){const s=document.createElement('span');s.className='bxk';s.title='Your idea is with your social media manager';s.textContent='💡';c.querySelector('span')&&c.querySelector('span').after(s);}else if(!has&&m)m.remove();});}
+
+/* 3 + 4. Today panel and Activity feed (admin) */
+let T=null,tAt=0,tBusy=false;
+async function today(){if(tBusy||Date.now()-tAt<12e4)return;tBusy=true;
+  try{const P=await fetchAll('posts','id,client_id,platform,post_date,post_time,approval,status,due_date'),o=P.filter(p=>p.status!=='Posted'),td=iso(new Date());
+    T={live:o.filter(p=>p.post_date===td).sort((a,b)=>(a.post_time||'').localeCompare(b.post_time||'')),wait:o.filter(p=>p.approval==='Pending').length,over:o.filter(p=>p.approval==='Pending'&&p.due_date&&dd(p.due_date)<0).length};tAt=Date.now();paintT();}catch(e){tAt=Date.now();}tBusy=false;}
+function paintT(){const m=Q('#app main');if(!m||!T)return;let c=Q('#bxt2');if(!c){c=document.createElement('div');c.id='bxt2';c.className='card';c.style.margin='0 0 12px';m.prepend(c);}
+  c.innerHTML='<b>Today</b> · '+esc(nice(iso(new Date())))+'<div style="margin-top:6px;color:var(--mute)">'+(T.live.length?'Going live: '+T.live.map(p=>esc(nm(p.client_id))+' ('+esc(p.platform)+(p.post_time?' '+esc(p.post_time.slice(0,5)):'')+')').join(', '):'Nothing scheduled to go live today.')+'</div><div style="margin-top:4px">'+T.wait+' waiting on clients'+(T.over?' · <b style="color:#c2410c">'+T.over+' overdue</b>':'')+'</div>';}
+async function activity(){const d=Q('#dlg');d.innerHTML='<h2>Recent activity</h2><p>Loading…</p>';if(!d.open)d.showModal();
+  try{const [P,H,C]=await Promise.all([fetchAll('posts','id,client_id,platform,post_date'),sb.from('post_history').select('post_id,change_type,old_approval,new_approval,changed_at,changed_by').order('changed_at',{ascending:false}).limit(60),sb.from('comments').select('post_id,body,created_at,author_id').order('created_at',{ascending:false}).limit(40)]);
+    const by=new Map(P.map(p=>[p.id,p])),ev=[];
+    (H.data||[]).forEach(h=>{const p=by.get(h.post_id);if(!p||h.change_type==='created'||h.old_approval===h.new_approval||!h.new_approval||h.changed_by===user.id)return;ev.push({t:h.changed_at,p,x:'marked '+(h.new_approval==='Changes requested'?'changes requested':h.new_approval.toLowerCase())});});
+    (C.data||[]).forEach(c=>{const p=by.get(c.post_id);if(p&&c.author_id!==user.id)ev.push({t:c.created_at,p,x:'commented: “'+String(c.body).slice(0,80)+'”'});});
+    ev.sort((a,b)=>b.t.localeCompare(a.t));
+    d.innerHTML='<h2>Recent activity</h2>'+(ev.slice(0,40).map(e=>`<div class="cm"><b>${esc(nm(e.p.client_id))}</b> ${esc(e.x)}<br><small>${esc(e.p.platform||'')} · ${e.p.post_date?esc(nice(e.p.post_date)):'no date'} · ${esc(new Date(e.t).toLocaleString())}</small></div>`).join('')||'<p>Nothing yet.</p>')+'<div class="row" style="margin-top:14px"><button type="button" id="bxz">Close</button></div>';Q('#bxz').onclick=()=>d.close();
+  }catch(e){fail(e);d.innerHTML='<p>Could not load: '+esc(e.message||e)+'</p><button type="button" id="bxz">Close</button>';Q('#bxz').onclick=()=>d.close();}}
+
+/* 5. Approve all remaining (client) */
+function approveAll(){const pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted'),d=Q('#dlg');
+  d.innerHTML=`<h2>Approve all ${pend.length} remaining?</h2><p style="color:var(--mute)">Only do this if you have looked at them.</p>`+pend.map(p=>`<div class="cm"><b>${esc(p.platform)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,80))}</small></div>`).join('')+'<div class="row" style="margin-top:12px"><button class="ok" type="button" id="bxy">Approve all</button><button type="button" id="bxn">Cancel</button></div>';d.showModal();
+  Q('#bxn').onclick=()=>d.close();
+  Q('#bxy').onclick=async()=>{Q('#bxy').disabled=true;let bad=0;for(const p of pend){const r=await sb.rpc('set_approval',{p_post:p.id,p_approval:'Approved'});if(r.error)bad++;}
+    d.close();await loadPosts();clientView();toast(bad?('Approved '+(pend.length-bad)+', '+bad+' could not be saved'):'All approved. It will go live as scheduled.');};}
+
+/* 9. saved replies (admin comment box) */
+const tpl=()=>{try{return JSON.parse(ls('cc_tpl')||'null')||['Done, updated!','Could you send a higher quality photo?','Thanks, scheduled.'];}catch(e){return [];}};
+function replies(){const c=Q('#cin');if(!c||Q('#bxqs'))return;const s=document.createElement('select');s.id='bxqs';s.style.width='auto';s.setAttribute('aria-label','Saved replies');
+  s.innerHTML='<option value="">Saved replies…</option>'+tpl().map(t=>`<option>${esc(t)}</option>`).join('')+'<option value="__e">Edit list…</option>';
+  s.onchange=()=>{if(s.value==='__e'){const v=prompt('One reply per line:',tpl().join('\n'));if(v!==null){ls('cc_tpl',JSON.stringify(v.split('\n').map(x=>x.trim()).filter(Boolean)));s.remove();replies();}return;}
+    if(s.value){c.value=(c.value?c.value+' ':'')+s.value;c.dispatchEvent(new Event('input'));s.value='';}};
+  c.after(s);}
+
+function run(){
+  if(!me)return;
+  if(isA()){const h=Q('header');if(h&&!Q('#bxac')){const b=document.createElement('button');b.id='bxac';b.type='button';b.textContent='Activity';b.onclick=activity;h.insertBefore(b,Q('#tl')||Q('#out'));}
+    today();paintT();replies();return;}
+  const h=Q('header');if(h&&!Q('#bxts')){const b=document.createElement('button');b.id='bxts';b.type='button';b.textContent='Aa';b.setAttribute('aria-label','Text size');b.onclick=()=>{const n=((+document.documentElement.dataset.ts||0)+1)%3;document.documentElement.dataset.ts=n;ls('cc_ts',n);};h.insertBefore(b,Q('#hp')||Q('#out'));}
+  if(ls('cc_ts')&&!document.documentElement.dataset.ts)document.documentElement.dataset.ts=ls('cc_ts');
+  if(lv==='cal'){loadIdeas();paintI();const r=Q('#cm>.row:first-child');if(r&&!Q('#bxp')){const b=document.createElement('button');b.id='bxp';b.type='button';b.className='noprint';b.textContent='🖨 Print';b.onclick=()=>print();r.appendChild(b);}}
+  const tb=Q('#topb'),pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').length;
+  if(tb&&!Q('#bxaa')&&pend>=2&&posts.filter(p=>p.approval==='Approved').length>=3&&lv!=='ideas'){const b=document.createElement('button');b.id='bxaa';b.type='button';b.className='ok';b.style.margin='8px 0';b.textContent='Approve all '+pend+' remaining…';b.onclick=approveAll;tb.appendChild(b);}
+}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
