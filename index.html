@@ -3119,11 +3119,7 @@ addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#ap,#axf'))v
 (function(){
 'use strict';
 const orig=window.dayTap;
-function ask(ds){
-  const d=document.getElementById('dlg');if(d&&d.open)d.close();
-  ideaDraft.by=ds;lv='ideas';clientView();scrollTo(0,0);
-  toast('Add your idea for '+new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}));
-}
+function ask(ds){const d=document.getElementById('dlg');if(d&&d.open)d.close();window.bxPanel(ds);}
 window.dayTap=function(ds){
   if(!me||me.role==='admin')return orig(ds);
   const has=posts.some(p=>p.post_date===ds);
@@ -3161,7 +3157,7 @@ function fill(){const i=Q('#dlg input[name="post_date"]');if(want&&i&&!i.value){
 new MutationObserver(fill).observe(Q('#dlg'),{childList:true,subtree:true});
 
 /* 2. idea markers on client calendar */
-let ideas=[],iAt=0,iBusy=false;
+let ideas=[],iAt=0,iBusy=false;window.bxIdeasRefresh=()=>{iAt=0;};
 async function loadIdeas(){if(iBusy||Date.now()-iAt<6e4)return;iBusy=true;
   try{const r=await sb.from('ideas').select('id,notes,status').eq('client_id',cid).eq('source','client').eq('status','Idea');ideas=(r.data||[]).map(i=>ideaMeta(i).by).filter(Boolean);iAt=Date.now();paintI();}catch(e){iAt=Date.now();}iBusy=false;}
 function paintI(){document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>{const has=ideas.includes(c.dataset.ds),m=c.querySelector('.bxk');
@@ -3220,6 +3216,82 @@ document.addEventListener('click',e=>{
   if(!c||e.target.closest('.cc')||document.getElementById('dlg').open)return;
   setTimeout(()=>{try{window.dayTap(c.dataset.ds);}catch(x){console.error(x);}},0);
 });
+</script>
+<style>
+#bxpn{position:fixed;z-index:30;top:0;right:0;bottom:0;width:min(400px,92vw);background:var(--card);border-left:1px solid var(--line);box-shadow:-10px 0 40px #0004;padding:18px;overflow:auto;animation:bxs .2s ease}
+@keyframes bxs{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+@media(min-width:900px){body.bxp #app{margin-right:410px}}
+@media(max-width:899px){#bxpn{top:auto;width:100%;max-height:72vh;border-left:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}body.bxp #app{padding-bottom:70vh}}
+.bxh{font-size:11px;color:var(--acc);white-space:normal;line-height:1.25;margin-top:2px}
+</style>
+<script>
+/* Add-ons 7: idea side panel, Ready to post, Weekly preview, Search, key dates for clients. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('addons7',e);
+const nice=d=>new Date(d+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
+const nm=id=>((clients.find(c=>c.id===id)||{}).name||'Client');
+const dlg=h=>{const d=Q('#dlg');d.innerHTML=h+'<div class="row" style="margin-top:14px"><button type="button" id="bxq">Close</button></div>';if(!d.open)d.showModal();Q('#bxq').onclick=()=>d.close();return d;};
+
+/* Idea side panel: the calendar stays visible */
+window.bxPanel=function(ds){
+  const old=Q('#bxpn');if(old)old.remove();
+  let kind='',files=[];const p=document.createElement('aside');p.id='bxpn';p.setAttribute('aria-label','Add an idea');
+  p.innerHTML=`<div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:19px">💡 Add an idea</h2><button type="button" id="bxpx" aria-label="Close">✕</button></div><p style="color:var(--mute);margin:4px 0 8px">For ${esc(new Date(ds+'T00:00').toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'}))}</p><div class="ibk">${['Event','Promotion','Photo','Question'].map(k=>`<button type="button" class="ibkb" data-k="${k}">${k}</button>`).join('')}</div><label for="bxpn1">Tell us the idea</label><textarea id="bxpn1" rows="4" placeholder="For example: sale this day, please post a reminder"></textarea><div class="row" style="margin-top:8px"><button type="button" id="bxpf">📎 Add photos or videos</button><input type="file" id="bxpi" accept="image/*,video/*" multiple hidden></div><div id="bxpl" style="font-size:13px;color:var(--mute);margin-top:4px"></div><p class="err" id="bxpe" role="status"></p><div class="row" style="margin-top:8px"><button class="p" type="button" id="bxps">Send idea</button></div>`;
+  document.body.appendChild(p);document.body.classList.add('bxp');
+  const close=()=>{p.remove();document.body.classList.remove('bxp');};
+  Q('#bxpx').onclick=close;
+  p.querySelectorAll('.ibkb').forEach(b=>b.onclick=()=>{kind=kind===b.dataset.k?'':b.dataset.k;p.querySelectorAll('.ibkb').forEach(x=>x.classList.toggle('on',x.dataset.k===kind));});
+  Q('#bxpf').onclick=()=>Q('#bxpi').click();
+  Q('#bxpi').onchange=e=>{files=files.concat([...e.target.files]);e.target.value='';Q('#bxpl').textContent=files.map(f=>f.name).join(', ');};
+  Q('#bxps').onclick=async()=>{const note=Q('#bxpn1').value.trim(),m=t=>Q('#bxpe').textContent=t;if(!note&&!files.length)return m('Add a note or a photo first.');
+    Q('#bxps').disabled=true;m('Sending…');
+    const tag=ideaTag(kind,ds),r=await sb.from('ideas').insert({client_id:cid,source:'client',author_id:user.id,notes:(tag+(tag&&note?'\n':'')+note)||null,title:(note||'Photo idea').split('\n')[0].slice(0,60)}).select('id').single();
+    if(r.error||!r.data){Q('#bxps').disabled=false;return m('Could not send: '+(r.error?r.error.message:'try again'));}
+    if(files.length)await sendMedia(files,r.data.id,m);
+    close();toast('Idea sent to your social media manager.');if(window.bxIdeasRefresh)window.bxIdeasRefresh();clientView();};
+  Q('#bxpn1').focus();
+};
+
+/* Share helper */
+function share(title,msg){const e=encodeURIComponent(msg);
+  dlg(`<h2 style="margin-top:0">${esc(title)}</h2><textarea id="bxm" rows="7">${esc(msg)}</textarea><div class="row" style="margin-top:10px">${navigator.share?'<button class="p" type="button" id="bxs1">Share…</button>':''}<a href="https://wa.me/?text=${e}" target="_blank" rel="noopener"><button type="button">WhatsApp</button></a><a href="mailto:?subject=${encodeURIComponent(title)}&body=${e}"><button type="button">Email</button></a><button type="button" id="bxc1">Copy</button></div>`);
+  if(Q('#bxs1'))Q('#bxs1').onclick=()=>navigator.share({text:Q('#bxm').value}).catch(()=>{});
+  Q('#bxc1').onclick=()=>navigator.clipboard.writeText(Q('#bxm').value).then(()=>toast('Copied'),()=>toast('Could not copy'));
+  Q('#bxm').oninput=()=>{const v=encodeURIComponent(Q('#bxm').value);document.querySelectorAll('#dlg a').forEach(a=>{a.href=a.href.replace(/(text=|body=)[^&]*/,'$1'+v);});};}
+
+/* 2. Weekly preview */
+function weekly(){const td=iso(new Date()),end=iso(new Date(Date.now()+7*864e5)),ps=posts.filter(p=>p.post_date>=td&&p.post_date<end&&p.status!=='Posted');
+  if(!ps.length)return toast('Nothing scheduled in the next 7 days.');
+  const n=nm(cid).trim();share('Weekly preview',`Hi${n?' '+n:''}! Here is what is going out this week:\n`+ps.map(p=>'• '+nice(p.post_date)+' – '+p.platform+(p.pillar?' ('+p.pillar+')':'')).join('\n')+`\nSee it all here: ${location.origin+location.pathname}`);}
+
+/* 1. Ready to post */
+async function ready(){dlg('<h2 style="margin-top:0">Ready to post today</h2><p>Loading…</p>');
+  try{const td=iso(new Date()),P=(await fetchAll('posts','id,client_id,platform,post_date,post_time,caption,hashtags,visual,status,approval')).filter(p=>p.post_date===td&&p.status!=='Posted').sort((a,b)=>(a.post_time||'').localeCompare(b.post_time||''));
+    dlg('<h2 style="margin-top:0">Ready to post today</h2>'+(P.length?P.map((p,i)=>`<div class="card" style="margin:8px 0" data-r="${i}"><b>${esc(nm(p.client_id))}</b> · ${esc(p.platform)}${p.post_time?' · '+esc(p.post_time.slice(0,5)):''} <span class="badge ${p.approval==='Approved'?'b-Approved':'b-Pending'}">${esc(p.approval==='Approved'?'Approved':'Not approved')}</span><div style="white-space:pre-wrap;color:var(--mute);margin:6px 0;max-height:80px;overflow:hidden">${esc(p.caption||'')}</div><div class="row"><button type="button" data-a="c">Copy caption + tags</button>${/^https?:/i.test(p.visual||'')?`<a href="${esc(p.visual)}" target="_blank" rel="noopener"><button type="button">Open media</button></a>`:''}<button type="button" class="ok" data-a="d">Mark as posted</button></div></div>`).join(''):'<p>Nothing left to post today. 🎉</p>'));
+    document.querySelectorAll('#dlg [data-r]').forEach(c=>{const p=P[+c.dataset.r];
+      c.querySelector('[data-a=c]').onclick=()=>navigator.clipboard.writeText((p.caption||'')+(p.hashtags?'\n\n'+p.hashtags:'')).then(()=>toast('Copied'),()=>toast('Could not copy'));
+      c.querySelector('[data-a=d]').onclick=async()=>{const r=await sb.from('posts').update({status:'Posted'}).eq('id',p.id);if(r.error)return alert('Could not update: '+r.error.message);c.remove();toast('Marked as posted');if(p.client_id===cid)loadPosts();};});
+  }catch(e){fail(e);dlg('<p>Could not load: '+esc(e.message||e)+'</p>');}}
+
+/* 3. Search */
+function search(){const d=dlg('<h2 style="margin-top:0">Search posts</h2><input id="bxsi" placeholder="Caption, campaign, hashtag or platform" autocomplete="off"><div id="bxsr" style="margin-top:8px"></div>');
+  const go=()=>{const q=Q('#bxsi').value.trim().toLowerCase(),r=Q('#bxsr');if(q.length<2){r.innerHTML='';return;}
+    const hit=posts.filter(p=>[p.caption,p.campaign,p.hashtags,p.platform,p.pillar].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,30);
+    r.innerHTML=hit.map((p,i)=>`<button type="button" class="wp" data-h="${i}" style="display:block;width:100%;text-align:left;margin:4px 0"><b>${esc(p.platform)}</b> · ${p.post_date?esc(nice(p.post_date)):'No date'}<br><small>${esc((p.caption||'').slice(0,90))}</small></button>`).join('')||'<p style="color:var(--mute)">No matches.</p>';
+    r.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{const p=hit[+b.dataset.h];d.close();if(isA())postForm(p);else{lv=false;idx=posts.indexOf(p);clientView();scrollTo(0,0);}});};
+  Q('#bxsi').oninput=go;Q('#bxsi').focus();}
+
+function run(){
+  if(!me)return;const h=Q('header');
+  const add=(id,t,f,before)=>{if(h&&!Q('#'+id)){const b=document.createElement('button');b.id=id;b.type='button';b.textContent=t;b.onclick=f;h.insertBefore(b,before||Q('#out'));}};
+  if(isA()){add('bxrd','Ready to post',ready,Q('#tl'));add('bxwk','Weekly preview',weekly,Q('#tl'));add('bxse','Search',search,Q('#tl'));return;}
+  add('bxse','🔍',search,Q('#hp')||Q('#out'));
+  document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>{if(c.querySelector('.bxh'))return;
+    const k=keyDates.filter(x=>x.key_date===c.dataset.ds);if(k.length){const d=document.createElement('div');d.className='bxh';d.textContent='★ '+k.map(x=>x.label).join(', ');c.appendChild(d);}});
+}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+})();
 </script>
 </body>
 </html>
