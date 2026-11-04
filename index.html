@@ -1243,7 +1243,7 @@ async function sendMedia(files,targetId,msg){let ok=0;
     if(st==='done')ok++;
     msg(st==='done'?'\u2713 '+f.name+' sent.':st==='failed'?f.name+' could not be sent. Please try again.':f.name+' is still being processed. It will show up soon.');
   }return ok;}
-function ideaThumbs(arr){return arr.length?`<div class="ith">${arr.map(x=>x.status==='done'?((x.mime_type||'').startsWith('image/')&&x.drive_file_id?`<a href="${esc(x.drive_link)}" target="_blank" rel="noopener"><img alt="" loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(x.drive_file_id)}&sz=w300"></a>`:`<a class="lnk" href="${esc(x.drive_link||'#')}" target="_blank" rel="noopener">\ud83c\udfac ${esc(String(x.file_name||'video').replace(/^\d+_/,''))}</a>`):`<small style="color:var(--mute)">${x.status==='failed'?'Could not send':'Sending\u2026'}</small>`).join('')}</div>`:'';}
+function ideaThumbs(arr){return arr.length?`<div class="ith">${arr.map(x=>x.status==='done'?((x.mime_type||'').startsWith('image/')&&x.drive_file_id?`<a href="${esc(x.drive_link)}" target="_blank" rel="noopener"><img alt="" loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(x.drive_file_id)}&sz=w300"></a>`:`<div class="vth">${x.drive_file_id?`<a class="vp" href="${esc(x.drive_link||'#')}" target="_blank" rel="noopener" aria-label="Play video"><img alt="" loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(x.drive_file_id)}&sz=w400" onerror="this.parentNode.remove()"></a>`:''}<a class="lnk" href="${esc(x.drive_link||'#')}" target="_blank" rel="noopener">\ud83c\udfac ${esc(String(x.file_name||'video').replace(/^\d+_/,''))}</a></div>`):`<small style="color:var(--mute)">${x.status==='failed'?'Could not send':'Sending\u2026'}</small>`).join('')}</div>`:'';}
 function ideaExtras(i,arr){return ideaThumbs(arr)+`<div style="margin-top:6px"><label style="font-size:13px">Reply to the client (they will see this)</label><textarea data-rt="${i.id}" rows="2">${esc(i.reply||'')}</textarea><button type="button" data-rs="${i.id}" style="min-height:0;padding:4px 12px">Send reply</button></div>`;}
 async function ideaBank(m){
   const r=await sb.from('ideas').select('*').eq('source','client').order('created_at',{ascending:false});
@@ -2841,6 +2841,7 @@ enh();
 })();
 </script>
 
+<style>.vth{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.vp{position:relative;display:block;border-radius:10px;overflow:hidden;background:var(--bg)}.vp img{display:block;max-width:100%;max-height:180px;object-fit:cover}.vp::after{content:'\25B6';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff;background:rgba(0,0,0,.28)}</style>
 <script>
 /* Add-ons: Needs attention, Remind client, direct post links, Suggest wording, Approve with a small fix, badge count. No database changes. */
 (function(){
