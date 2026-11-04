@@ -206,7 +206,7 @@ async function boot0(){
   if(!session) return loginView();
   user=session.user;
   const {data,error}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
-  if(error||!data){await sb.auth.signOut();return loginView('This login is not linked to a calendar yet. Ask your social media manager.');}
+  if(error&&!navigator.onLine)throw error;if(error||!data){await sb.auth.signOut();return loginView('This login is not linked to a calendar yet. Ask your social media manager.');}
   me=data;
   if(me.role==='admin'){
     const r=await sb.from('clients').select('*').order('name');
@@ -2937,6 +2937,73 @@ function run(){
 }
 let raf=0;
 new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
+})();
+</script>
+
+<script>
+/* Add-ons 2: More tools (Repeating posts, Campaigns, Client speed), swipe to decide, video timestamps, offline snapshot. */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s),isA=()=>me&&me.role==='admin',fail=e=>console.error('addons2',e);
+const open=h=>{const d=Q('#dlg');d.innerHTML=h+'<div class="row" style="margin-top:14px"><button type="button" id="bxc">Close</button></div>';if(!d.open)d.showModal();Q('#bxc').onclick=()=>d.close();return d;};
+const opts=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
+
+function menu(){open('<h2 style="margin-top:0">More tools</h2><div class="row"><button id="bm1">Repeating posts</button><button id="bm2">Campaigns</button><button id="bm3">Client speed</button></div>');
+  Q('#bm1').onclick=repeat;Q('#bm2').onclick=camps;Q('#bm3').onclick=speed;}
+
+/* 8. Repeating posts */
+function repeat(){const n=new Date(),ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'),W=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  open(`<h2 style="margin-top:0">Repeating posts</h2><div class="row"><div><label>Every</label><select id="bxw">${W.map((x,i)=>`<option value="${i}"${i===1?' selected':''}>${x}</option>`).join('')}</select></div><div><label>Time</label><input id="bxt" type="time" value="09:00"></div></div><label>Month</label><input id="bxm" type="month" value="${ym}"><label>Platform</label><select id="bxp">${opts(PLATFORMS)}</select><label>Pillar</label><select id="bxl">${opts(Object.keys(PILLARS))}</select><label>Format</label><input id="bxf" value="Photo"><label>Campaign (optional)</label><input id="bxk"><div class="row" style="margin-top:10px"><button class="p" id="bxg">Create drafts</button></div><p style="font-size:13px;color:var(--mute)">Each draft gets a “[Fill in…]” caption as a placeholder. Dates that already have a post on that platform are skipped.</p>`);
+  Q('#bxg').onclick=async()=>{const [y,m]=Q('#bxm').value.split('-').map(Number),wd=+Q('#bxw').value,pl=Q('#bxp').value,pi=Q('#bxl').value,rows=[],ex=new Set(posts.map(p=>p.post_date+'|'+p.platform));
+    for(let d=1;d<=new Date(y,m,0).getDate();d++){const dt=new Date(y,m-1,d),ds=iso(dt);if(dt.getDay()!==wd||ex.has(ds+'|'+pl))continue;
+      rows.push({client_id:cid,post_date:ds,post_time:Q('#bxt').value||null,platform:pl,pillar:pi,format:Q('#bxf').value.trim(),caption:`[Fill in: ${pi} post for ${dt.toLocaleDateString('en',{month:'short',day:'numeric'})}]`,visual:'',hashtags:'',campaign:Q('#bxk').value.trim(),repost:false,status:'Draft',approval:'Pending'});}
+    if(!rows.length)return toast('Nothing to create: those dates already have posts.');
+    const r=await sb.from('posts').insert(rows);if(r.error)return alert('Could not create: '+r.error.message);
+    Q('#dlg').close();await loadPosts();adminView();toast(rows.length+' draft posts created');};}
+
+/* 10. Campaigns */
+function camps(){const g={};posts.forEach(p=>{const k=(p.campaign||'').trim();if(k)(g[k]=g[k]||[]).push(p);});
+  const ks=Object.keys(g).sort();
+  open('<h2 style="margin-top:0">Campaigns</h2>'+(ks.length?ks.map(k=>{const a=g[k],t=a.length,ap=a.filter(p=>p.approval==='Approved').length,lv_=a.filter(p=>p.status==='Posted').length;
+    return `<div class="card" style="margin:8px 0"><b>${esc(k)}</b><div style="height:10px;border-radius:5px;background:var(--line);margin:6px 0;position:relative;overflow:hidden"><div style="position:absolute;inset:0 auto 0 0;width:${ap/t*100}%;background:#7c9cf0"></div><div style="position:absolute;inset:0 auto 0 0;width:${lv_/t*100}%;background:#177a4e"></div></div><small>${t} posts · ${t-ap} not approved · ${ap} approved · ${lv_} live</small></div>`;}).join(''):'<p>No posts have a campaign yet. Add one in the post form’s “Campaign / promo” field.</p>'));}
+
+/* 9. Client speed */
+async function speed(){open('<p>Loading…</p>');
+  try{const [P,H]=await Promise.all([fetchAll('posts','id,client_id,approval,status'),fetchAll('post_history','post_id,change_type,new_approval,changed_at')]);
+    const pc=new Map(P.map(p=>[p.id,p.client_id])),cr=new Map(),ap=new Map();
+    H.forEach(h=>{const t=+new Date(h.changed_at);if(h.change_type==='created')cr.set(h.post_id,t);else if(h.new_approval==='Approved'&&!(ap.has(h.post_id)&&ap.get(h.post_id)<t))ap.set(h.post_id,t);});
+    const rows=clients.map(c=>{const h=[];ap.forEach((t,id)=>{if(pc.get(id)===c.id&&cr.has(id)&&t>cr.get(id))h.push((t-cr.get(id))/864e5);});h.sort((a,b)=>a-b);
+      return {n:c.name,m:h.length?h[h.length>>1]:null,k:h.length,w:P.filter(p=>p.client_id===c.id&&p.approval==='Pending'&&p.status!=='Posted').length};}).sort((a,b)=>(b.m||0)-(a.m||0));
+    open('<h2 style="margin-top:0">Client response speed</h2><p style="color:var(--mute);font-size:13px">Median days from a post being created to being approved. Slowest first.</p>'+rows.map(r=>`<div class="card" style="margin:6px 0"><b>${esc(r.n)}</b>: ${r.m==null?'not enough data':'about '+(r.m<1?'under a day':r.m.toFixed(1)+' days')}<br><small>${r.k} approved · ${r.w} waiting now</small></div>`).join(''));
+  }catch(e){fail(e);open('<p>Could not load: '+esc(e.message||e)+'</p>');}}
+
+/* 5. Swipe to decide: right = approve (with Undo), left = opens Request changes */
+let sx=0,sy=0;
+document.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{capture:true,passive:true});
+document.addEventListener('touchend',e=>{
+  const ap=Q('#ap'),rc=Q('#rc');if(!ap||!rc||isA()||!e.target.closest('#cm')||e.target.closest('video,iframe,input,textarea,select,.pinwrap,button,a'))return;
+  const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)<110||Math.abs(dy)>60)return;
+  e.stopPropagation();(dx>0?ap:rc).click();},{capture:true});
+
+/* 6. Comment at a moment in a video */
+function vcm(){const p=posts[idx],v=Q('video.pvid'),t=v?Math.floor(v.currentTime):0,d=open(`<h2 style="margin-top:0">Comment at this time</h2><label>Time (minutes:seconds)</label><input id="bxs" value="${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}" inputmode="numeric"><label>Your comment</label><textarea id="bxy" rows="3" placeholder="For example: logo is cut off"></textarea><div class="row" style="margin-top:10px"><button class="p" id="bxg">Add comment</button></div>`);
+  Q('#bxg').onclick=async()=>{const tm=Q('#bxs').value.trim(),tx=Q('#bxy').value.trim();if(!/^\d{1,3}:[0-5]\d$/.test(tm))return toast('Type the time like 0:12');if(!tx)return Q('#bxy').focus();
+    const r=await sb.from('comments').insert({post_id:p.id,author_id:user.id,body:`At ${tm}: ${tx}`});if(r.error)return alert('Could not add: '+r.error.message);d.close();showComments(p.id,'#cmx');toast('Comment added');};}
+
+/* 12. Offline: save a read-only snapshot, show it when the app cannot connect */
+function snap(){try{if(!isA()&&posts.length&&navigator.onLine)localStorage.setItem('cc_off',JSON.stringify({n:CNAME,t:Date.now(),p:posts.map(x=>[x.post_date,x.post_time,x.platform,x.format,x.approval,x.caption])}));}catch(e){}}
+function offView(){let s;try{s=JSON.parse(localStorage.getItem('cc_off'));}catch(e){}if(!s)return;
+  $('#app').innerHTML=`<main><h2>${esc(s.n||'Content calendar')}</h2><div class="warn">Offline. This is the calendar as last saved on ${esc(new Date(s.t).toLocaleString())}. You can’t approve until you’re connected.</div>`+s.p.map(r=>`<div class="card" style="margin:8px 0"><b>${esc(r[2])}</b> · ${r[0]?esc(new Date(r[0]+'T00:00').toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'})):'No date'} · ${esc(r[4]||'')}<div style="white-space:pre-wrap;margin-top:4px">${esc(r[5]||'')}</div></div>`).join('')+'</main>';}
+
+function run(){
+  if(Q('#rt')&&!Q('#bxo')&&localStorage.getItem('cc_off')){const b=document.createElement('button');b.id='bxo';b.type='button';b.style.cssText='width:100%;margin-top:8px';b.textContent='View last saved calendar';b.onclick=offView;Q('#rt').after(b);}
+  if(!me)return;
+  if(isA()){const h=Q('header');if(h&&!Q('#bxa')){const b=document.createElement('button');b.id='bxa';b.type='button';b.textContent='More tools';b.onclick=menu;h.insertBefore(b,Q('#tl')||Q('#out'));}return;}
+  snap();
+  const c=Q('#cmx');if(c&&Q('.vbox,.pvid')&&!Q('#bxv')){const b=document.createElement('button');b.id='bxv';b.type='button';b.textContent='⏱ Comment at this time';b.style.margin='10px 0 0';b.onclick=vcm;c.before(b);}
+  const ap=Q('#ap');if(ap&&!Q('#bxh')){const s=document.createElement('p');s.id='bxh';s.style.cssText='text-align:center;font-size:12px;color:var(--mute);margin:4px 0';s.textContent='Tip: swipe right to approve, left to request changes';ap.parentNode.after(s);}
+}
+let raf=0;new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{run();}catch(e){fail(e);}});}).observe(Q('#app'),{childList:true,subtree:true});
 })();
 </script>
 
