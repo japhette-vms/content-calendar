@@ -3218,7 +3218,7 @@ function run(){
   if(!me)return;
   if(isA()){const h=Q('header');if(h&&!Q('#bxac')){const b=document.createElement('button');b.id='bxac';b.type='button';b.textContent='Activity';b.onclick=activity;h.insertBefore(b,Q('#tl')||Q('#out'));}
     today();paintT();replies();return;}
-  const h=Q('header');if(h&&!Q('#bxts')){const b=document.createElement('button');b.id='bxts';b.type='button';b.textContent='Aa';b.setAttribute('aria-label','Text size');b.onclick=()=>{const n=((+document.documentElement.dataset.ts||0)+1)%3;document.documentElement.dataset.ts=n;ls('cc_ts',n);};h.insertBefore(b,Q('#hp')||Q('#out'));}
+  const h=Q('header');if(h&&!Q('#bxts')){const b=document.createElement('button');b.id='bxts';b.type='button';b.textContent='Aa';b.setAttribute('aria-label','Text size');b.onclick=()=>{const n=((+document.documentElement.dataset.ts||0)+1)%3;document.documentElement.dataset.ts=n;ls('cc_ts',n);};{const r=Q('#hp')||Q('#out');if(r&&r.parentNode)r.parentNode.insertBefore(b,r);else h.appendChild(b);}}
   if(ls('cc_ts')&&!document.documentElement.dataset.ts)document.documentElement.dataset.ts=ls('cc_ts');
   if(lv==='cal'){loadIdeas();paintI();const r=Q('#cm>.row:first-child');if(r&&!Q('#bxp')){const b=document.createElement('button');b.id='bxp';b.type='button';b.className='noprint';b.textContent='🖨 Print';b.onclick=()=>print();r.appendChild(b);}}
   const tb=Q('#topb'),pend=posts.filter(p=>p.approval==='Pending'&&p.status!=='Posted').length;
@@ -3304,7 +3304,7 @@ function search(){const d=dlg('<h2 style="margin-top:0">Search posts</h2><input 
 
 function run(){
   if(!me)return;const h=Q('header');
-  const add=(id,t,f,before)=>{if(h&&!Q('#'+id)){const b=document.createElement('button');b.id=id;b.type='button';b.textContent=t;b.onclick=f;h.insertBefore(b,before||Q('#out'));}};
+  const add=(id,t,f,before)=>{if(h&&!Q('#'+id)){const b=document.createElement('button');b.id=id;b.type='button';b.textContent=t;b.onclick=f;const r=before||Q('#out');if(r&&r.parentNode)r.parentNode.insertBefore(b,r);else h.appendChild(b);}};
   if(isA()){add('bxrd','Ready to post',ready,Q('#tl'));add('bxwk','Weekly preview',weekly,Q('#tl'));add('bxse','Search',search,Q('#tl'));return;}
   add('bxse','🔍',search,Q('#hp')||Q('#out'));
   document.querySelectorAll('.cgrid .day[data-ds]').forEach(c=>{if(c.querySelector('.bxh'))return;
@@ -3577,6 +3577,67 @@ let sx=0,sy=0,on=false;
 document.addEventListener('touchstart',e=>{const g=e.target.closest&&e.target.closest('.cgrid');on=!!g&&!!Q('#pm')&&!Q('#bxpn')&&!(Q('#dlg')&&Q('#dlg').open);if(on){sx=e.touches[0].clientX;sy=e.touches[0].clientY;}},{passive:true});
 document.addEventListener('touchend',e=>{if(!on)return;on=false;const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
   if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*2)return;const b=Q(dx<0?'#nm':'#pm');if(b)b.click();},{passive:true});
+})();
+</script>
+<script>
+/* Add-ons 8: phone notifications (client menu) and reminder controls (admin client settings). */
+(function(){
+'use strict';
+const Q=s=>document.querySelector(s);
+const VAPID_PUBLIC='BGorxZKf-y6Vplui1n2XNuRlAwrMLHNCObprnQFq0DL-HpuqXToRuHezJ8C40Ie8I_L8aCihVl4YpfZLQNducNM';
+const can=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const u8=b=>{const p='='.repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));};
+async function vkey(){if(VAPID_PUBLIC)return VAPID_PUBLIC;try{const r=await sb.rpc('get_vapid');return (r.data&&r.data.public)||'';}catch(e){return '';}}
+async function curSub(){try{const reg=await navigator.serviceWorker.ready;return await reg.pushManager.getSubscription();}catch(e){return null;}}
+async function label(){const b=Q('#bxnt');if(!b)return;b.textContent=(await curSub())?'\ud83d\udd14 Notifications: on':'\ud83d\udd14 Turn on notifications';}
+async function toggle(){
+  if(!can())return alert('This browser cannot show notifications. On iPhone, add the app to your Home Screen first.');
+  const s=await curSub();
+  if(s){const ep=s.endpoint;await s.unsubscribe();await sb.from('push_subscriptions').delete().eq('endpoint',ep);toast('Notifications turned off.');return label();}
+  const key=await vkey();if(!key)return alert('Notifications are not set up yet.');
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted')return alert('Notifications are blocked. Allow them in your phone or browser settings, then try again.');
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(key)});
+    const j=sub.toJSON();
+    await sb.from('push_subscriptions').delete().eq('endpoint',j.endpoint);
+    const r=await sb.from('push_subscriptions').insert({user_id:user.id,client_id:cid,endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,user_agent:navigator.userAgent.slice(0,200)});
+    if(r.error){await sub.unsubscribe();return alert('Could not turn on notifications: '+r.error.message);}
+    toast('Notifications are on.');label();
+    sb.functions.invoke('send-reminders',{body:{test_push:true}});
+  }catch(e){alert('Could not turn on notifications: '+(e.message||e));}
+}
+function client(){
+  if(!me||me.role==='admin')return;const mi=Q('.cmenu .mi');if(!mi||Q('#bxnt'))return;
+  const b=document.createElement('button');b.type='button';b.id='bxnt';b.textContent='\ud83d\udd14 Turn on notifications';b.onclick=toggle;mi.appendChild(b);label();
+}
+async function admin(){
+  if(!me||me.role!=='admin')return;const f=Q('#dlg #sf');if(!f||Q('#bxrm'))return;
+  const d=document.createElement('div');d.id='bxrm';d.className='card';d.style.marginTop='12px';
+  d.innerHTML='<h3 style="margin-top:0">Reminders and results</h3>'
+   +'<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="bxr1" style="width:auto"> Email and notify this client when posts are waiting (8am their time)</label>'
+   +'<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="bxr2" style="width:auto"> Share monthly results with this client</label>'
+   +'<div class="row" style="margin-top:8px"><button type="button" id="bxr3">Send reminder now</button><button type="button" id="bxr4">Send me a test notification</button></div>'
+   +'<p id="bxrs" role="status" style="font-size:13px;color:var(--mute);margin:6px 0 0"></p>';
+  f.after(d);
+  const st=t=>{const e=Q('#bxrs');if(e)e.textContent=t;};
+  const r=await sb.from('client_settings').select('reminders,share_results').eq('client_id',cid).maybeSingle();
+  if(Q('#bxr1')){Q('#bxr1').checked=!(r.data&&r.data.reminders===false);Q('#bxr2').checked=!!(r.data&&r.data.share_results);}
+  const save=async(k,v)=>{const w=await sb.from('client_settings').upsert({client_id:cid,[k]:v});st(w.error?'Could not save: '+w.error.message:'Saved.');};
+  Q('#bxr1').onchange=e=>save('reminders',e.target.checked);
+  Q('#bxr2').onchange=e=>save('share_results',e.target.checked);
+  const run=async(body,btn)=>{btn.disabled=true;st('Sending\u2026');
+    try{const x=await sb.functions.invoke('send-reminders',{body});
+      if(x.error)st('Could not send: '+(x.error.message||'error'));
+      else{const v=x.data||{};st(v.message||(v.devices!==undefined?('Devices: '+v.devices+'. Notified: '+(v.sent||0)+'.'+(v.error?' '+v.error:'')):('Waiting posts: '+(v.waiting||0)+'. Emails sent: '+((v.email&&v.email.sent)||0)+(v.email&&v.email.error?' ('+v.email.error+')':'')+'. Phones notified: '+((v.push&&v.push.sent)||0)+'.')));}
+    }catch(e){st('Could not send: '+(e.message||e));}
+    btn.disabled=false;};
+  Q('#bxr3').onclick=e=>run({notify_client:cid},e.target);
+  Q('#bxr4').onclick=e=>run({test_push:true},e.target);
+}
+let raf=0;const go=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{client();}catch(e){console.error(e);}try{admin();}catch(e){console.error(e);}});};
+new MutationObserver(go).observe(document.body,{childList:true,subtree:true});
 })();
 </script>
 </body>
